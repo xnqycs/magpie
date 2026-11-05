@@ -6,8 +6,8 @@
 // names are as tall as the tallest beside them. No rule of the windows says
 // subgrid, and at each width, in both engines and every language, the bars
 // of each row of windows start at one y, the names of a window too
-// short to wrap still sit above its bar, and a reset line is as far under
-// its bar as the subgrid put it. MAGPIE_QUOTA_ASSETS points the
+// short to wrap still sit above its bar, and reset lines retain their
+// spacing (tighter inside compact live account cards). MAGPIE_QUOTA_ASSETS points the
 // page at an older asset tree, to watch this go red there.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -63,6 +63,7 @@ test("no rule of the windows says subgrid", async () => {
 // each window: its row's y, its name's height, its bar's top, its names' bottom
 const windowsOf = (page) => page.evaluate(() => [...document.querySelectorAll(".subscription-card .quota-windows > .quota")].map((q) => ({
   row: Math.round(q.getBoundingClientRect().top),
+  compact: q.parentElement.classList.contains("quota-live"),
   name: q.querySelector(".quota-name").getBoundingClientRect().height,
   barHeight: q.querySelector(".quota-track")?.getBoundingClientRect().height,
   bar: q.querySelector(".quota-track")?.getBoundingClientRect().top,
@@ -74,8 +75,8 @@ const windowsOf = (page) => page.evaluate(() => [...document.querySelectorAll(".
 // fits them in (quotaFit)
 const frames = (page) => page.evaluate(() => new Promise((r) => { let n = 4; const f = () => (--n ? requestAnimationFrame(f) : r()); requestAnimationFrame(f); }));
 
-// the bars of each row of windows start at one y, and a reset line is as
-// far under its bar as it was; and whether some row's names differ in
+// the bars of each row of windows start at one y, and reset lines keep
+// the spacing of their surface; and whether some row's names differ in
 // height, as the case is about
 async function lined(page) {
   await frames(page);
@@ -85,7 +86,7 @@ async function lined(page) {
     assert.equal(new Set(bars).size, 1, `row at ${y}: bars at ${bars} ${JSON.stringify(ws)}`);
   }
   for (const w of ws) if (w.bar != null) assert.ok(w.under <= w.bar + 0.5, `names past the bar ${JSON.stringify(w)}`);
-  for (const w of ws) if (w.reset != null) assert.ok(Math.abs(w.reset - w.bar - w.barHeight - 9) < 0.6, `reset ${w.reset - w.bar}px under its bar's top`);
+  for (const w of ws) if (w.reset != null) assert.ok(Math.abs(w.reset - w.bar - w.barHeight - (w.compact ? 6 : 9)) < 0.6, `reset ${w.reset - w.bar}px under its bar's top`);
   return [...new Set(ws.map((w) => w.row))].some((y) => new Set(ws.filter((w) => w.row === y).map((w) => Math.round(w.name))).size > 1);
 }
 

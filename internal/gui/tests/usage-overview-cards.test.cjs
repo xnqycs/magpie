@@ -73,9 +73,16 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       }
       assert.equal(await cards.first().locator(".quota-account-state").textContent(), words[lang][2]);
       const original = await summary.innerText();
-      for (const width of [1440, 390]) {
-        await page.setViewportSize({ width, height: width === 390 ? 900 : 1000 });
-        await page.waitForFunction(() => [...document.querySelectorAll(".quota-live")].every((e) => e.classList.contains("quota-stack") === (e.clientWidth < 330)));
+      for (const width of [1920, 1440, 390, 320]) {
+        await page.setViewportSize({ width, height: width <= 390 ? 900 : 1000 });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await page.waitForFunction(() => [...document.querySelectorAll(".quota-live")].every((e) => e.classList.contains("quota-stack") === (e.clientWidth < 250)));
+        if (width === 1920) {
+          const inFirstRow = await cards.evaluateAll((cs) => cs.filter((c) => Math.abs(c.getBoundingClientRect().top - cs[0].getBoundingClientRect().top) < 1).length);
+          assert.equal(inFirstRow, 4, "wide rows hold four accounts");
+          assert((await cards.nth(4).boundingBox()).y > (await cards.first().boundingBox()).y, "wide rows hold four accounts");
+        }
+        if (width === 1440 && lang === "zh") assert((await cards.first().boundingBox()).height < 215, "three-period account cards stay compact");
         const bad = await cards.evaluateAll((cs) => cs.flatMap((c) => {
           const b = c.getBoundingClientRect(), bad = [];
           if (c.scrollWidth > c.clientWidth + 1) bad.push("card overflow");

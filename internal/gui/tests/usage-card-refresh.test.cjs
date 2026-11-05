@@ -2,7 +2,8 @@
 // A card's own refresh (Hu9956, #840: 在更新时间左侧加一个刷新按钮，鼠标悬停
 // 在套餐卡片上时显示，可以单独刷新某个套餐的用量): after "Updated …", or
 // after why a reading failed, or under a balance, opening as the card is
-// hovered; at rest the line starts where the card's others do, and the text
+// hovered (always visible on an Overview account card); at rest the line
+// starts where the card's others do, and the text
 // doesn't move when it opens (opening left of it pushed it right on every
 // hover). A click reads that card alone
 // (POST /api/usage/quotas/refresh?provider=&user=), turns while it does, and
@@ -148,6 +149,7 @@ const textAt = (row) => row.evaluate((e) => {
 });
 
 async function showRefresh(row) {
+  await row.waitFor({ state: "visible" });
   const was = await textAt(row);
   await row.hover();
   await row.locator(".quota-refresh").evaluate(e => new Promise(done => {
@@ -307,9 +309,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const ago = read.locator(".quota-ago");
       const opacity = () => btn.evaluate((e) => getComputedStyle(e).opacity);
 
-      // at rest: not there, the line starting where the account's does
+      // At rest the Overview's refresh stays visible, after the reading.
       await page.mouse.move(890, 5);
-      await btn.evaluate((e) => new Promise((done) => { const tick = () => getComputedStyle(e).opacity === "0" ? done() : requestAnimationFrame(tick); tick(); }));
+      assert.equal(await opacity(), "1", "Overview refresh is visible without hovering");
       const user = await claude.locator(".subscription-account .user").boundingBox();
       assert.ok(Math.abs((await ago.boundingBox()).x - user.x) < 1, "the time lines up with the card at rest");
 
@@ -327,11 +329,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".subscription-card", { hasText: "Relay" }).locator(".quota-read button.quota-refresh").count(), 1);
 
       // the click: that card alone, turning meanwhile, the page where it was
-      await claude.scrollIntoViewIfNeeded();
-      await page.evaluate(() => window.scrollBy(0, 40));
+      await inView(page, btn);
       const y = await page.evaluate(() => [scrollY, document.querySelector("#view-usage").scrollTop, document.scrollingElement.scrollTop]);
       const gets = state.gets;
-      await claude.hover();
       await btn.click();
       await page.waitForFunction(() => document.querySelector(".quota-refresh.busy"));
       assert.equal(await claude.locator(".quota-refresh.busy").count(), 1, "turns while it reads");

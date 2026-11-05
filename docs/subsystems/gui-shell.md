@@ -284,8 +284,10 @@ cards (`renderQuotas`, `packUsage` in app.js). Every account owns its name,
 live meters, read/refresh line and expandable details. Three windows fit
 side by side when the card has room; narrow cards put all windows in one
 column, never an isolated third window beside the next account. The grid
-has at most three columns. Existing account expansion, many-account folds,
-hiding, provider order and privacy preferences are retained. Folded accounts
+has at most four columns on wide screens; compact padding and meter spacing
+keep each account short without hiding its reset times. Existing account
+expansion, many-account folds, hiding, provider order and privacy preferences
+are retained. Folded accounts
 count in the summary; accounts hidden from Overview do not. Menu actions
 and focus highlights resolve the enclosing account by its card identity.
 

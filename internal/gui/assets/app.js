@@ -16270,7 +16270,7 @@ function packUsage() {
   const list = $("#subscriptionUsage");
   if (!list || list.classList.contains("sorting")) return;
   for (const grid of list.querySelectorAll(".quota-accounts")) {
-    const n = Math.max(1, Math.min(3, grid.children.length, Math.floor((grid.clientWidth + 12) / 372)));
+    const n = Math.max(1, Math.min(4, grid.children.length, Math.floor((grid.clientWidth + 12) / 292)));
     const columns = `repeat(${n}, minmax(0, 1fr))`;
     if (grid.style.gridTemplateColumns !== columns) grid.style.gridTemplateColumns = columns;
   }
@@ -18288,7 +18288,7 @@ function fitQuotas() {
 function fitQuota(g) {
   if (g.classList.contains("quota-live")) {
     g.style.setProperty("--quota-columns", Math.max(1, Math.min(3, g.children.length)));
-    g.classList.toggle("quota-stack", g.clientWidth < 330);
+    g.classList.toggle("quota-stack", g.clientWidth < 250);
   }
   // a count's own width, its parts laid end to end: once stacked it spans
   // the row and may be two lines, so its box no longer says

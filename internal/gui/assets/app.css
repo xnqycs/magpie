@@ -1040,19 +1040,20 @@ body.window .field.solo { grid-column: auto; }
 .usage-provider > .subscription-head { flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .usage-provider > .subscription-head b { font-size: 15px; }
 .quota-accounts { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
-.quota-account-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
-.quota-account-card .subscription-account { flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; padding: 0 !important; font-size: 13px; }
+.quota-account-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.quota-account-card .subscription-account { flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; padding: 0 !important; font-size: 12px; }
 .quota-account-card .subscription-account .user { flex: 1 1 100px; font-weight: 600; }
 .quota-account-card .subscription-account .plan { font-size: 11px; }
 .quota-account-card .quota-acct-fold { width: 26px; height: 26px; margin: -4px; color: var(--muted); }
-.quota-account-card .quota-live { grid-template-columns: repeat(var(--quota-columns, 3), minmax(0, 1fr)); gap: 14px; }
+.quota-account-card .quota-live { grid-template-columns: repeat(var(--quota-columns, 3), minmax(0, 1fr)); gap: 10px; }
 .quota-account-card .quota-live.quota-stack { grid-template-columns: minmax(0, 1fr); }
-.quota-account-card .quota-live .quota-labels { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; justify-content: stretch; gap: 4px; margin-bottom: 7px; }
+.quota-account-card .quota-live .quota-labels { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; justify-content: stretch; gap: 3px; margin-bottom: 5px; }
 .quota-account-card .quota-live .quota-name { font-size: 12px; color: var(--muted); }
-.quota-account-card .quota-live .quota-n { display: flex; flex-basis: auto; flex-wrap: wrap; min-width: 0; white-space: normal; margin: 0; padding: 0; text-align: left; font-size: 18px; line-height: 1.35; font-weight: 600; }
+.quota-account-card .quota-live .quota-n { display: flex; flex-basis: auto; flex-wrap: wrap; min-width: 0; white-space: normal; margin: 0; padding: 0; text-align: left; font-size: 14px; line-height: 1.3; font-weight: 600; }
 .quota-account-card .quota-live .quota-n > span { white-space: normal; overflow-wrap: anywhere; }
 .quota-account-card .quota-live .quota-reset { display: flex; font-size: 10.5px; }
-.quota-account-card .quota-track { height: 5px; }
+.quota-account-card .quota-track { height: 4px; }
+.quota-account-card .quota-live .quota-track + .quota-reset { margin-top: 6px; }
 .quota-account-card .quota-low .quota-track i, .quota-total.low .quota-track i { background: var(--amber); }
 .quota-account-card .quota-empty .quota-track i, .quota-total.empty .quota-track i { background: var(--red); }
 .quota-account-card .quota-low .quota-n, .quota-account-state.low, .quota-total.low .quota-total-value { color: var(--amber); }
@@ -1060,11 +1061,11 @@ body.window .field.solo { grid-column: auto; }
 .quota-account-card .quota-held .quota-track { opacity: .35; }
 .quota-held-note { display: none; }
 .quota-account-card .quota-held-note { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; overflow-wrap: anywhere; }
-.quota-account-state { margin: 0 0 14px; font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
-.quota-account-state.low, .quota-account-state.empty, .quota-account-state.unknown { border-radius: 6px; background: var(--pill); padding: 5px 8px; }
-.quota-account-card > .quota-read { margin-top: 12px; }
+.quota-account-state { margin: 0 0 8px; font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.quota-account-state.low, .quota-account-state.empty, .quota-account-state.unknown { border-radius: 6px; background: var(--pill); padding: 4px 6px; }
+.quota-account-card > .quota-read { margin-top: 8px; }
 .quota-account-card .quota-refresh { width: 14px; margin: 0 0 0 4px; opacity: 1; }
-.quota-account-details { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; min-width: 0; }
+.quota-account-details { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; min-width: 0; }
 .quota-account-details:empty { display: none; }
 .quota-account-details > :first-child { margin-top: 0; }
 .quota-history-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
