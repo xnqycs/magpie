@@ -1078,6 +1078,12 @@ body.window .field.solo { grid-column: auto; }
 .quota-total-unit { font-size: 11px; color: var(--fg-2); }
 .quota-total-info, .quota-total-note { font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
 .quota-total .quota-track { margin: 4px 0; height: 5px; }
+.quota-total-share { align-items: center; text-align: center; gap: 8px; }
+.quota-total-ring { --quota-color: var(--accent); position: relative; width: 120px; max-width: 100%; aspect-ratio: 1; border-radius: 50%; background: conic-gradient(var(--quota-color) var(--quota-left), var(--pill) 0); }
+.quota-total-center { position: absolute; inset: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 50%; background: var(--card); }
+.quota-total-ring .quota-total-value { font-size: clamp(13px, 2.4vw, 24px); white-space: nowrap; }
+.quota-total.low .quota-total-ring { --quota-color: var(--amber); }
+.quota-total.empty .quota-total-ring { --quota-color: var(--red); }
 .quota-overview-note, .quota-overview-unknown { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); margin: 12px 0 0; }
 .quota-overview-unknown { color: var(--amber); }
 

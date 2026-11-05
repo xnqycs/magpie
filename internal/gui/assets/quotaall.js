@@ -136,23 +136,42 @@ function quotaOverview(subs) {
   grid.style.gridTemplateColumns = `repeat(${Math.max(1, Math.min(3, ws.length))}, minmax(0, 1fr))`;
   for (const w of ws) {
     const item = el("div", "quota-total");
-    const name = (w.pool && !w.window ? w.pool + " · " : "") + t(w.name) + (w.plan ? " · " + w.plan : "");
+    // Compact labels for OpenCode Go's three periods; reset times still
+    // come from the vendor's reading, including its monthly window.
+    const period = subs[0]?.provider === "opencode-go" ? { "5 hours": "5h", "7 days": "7d", Month: "30d" }[w.name] || w.name : w.name;
+    const name = (w.pool && !w.window ? w.pool + " · " : "") + t(period) + (w.plan ? " · " + w.plan : "");
+    item.classList.toggle("quota-total-share", w.how === "p");
     item.append(el("span", "quota-total-name", name));
     if (!w.accounts) {
       item.append(el("b", "quota-total-value", t("Awaiting a new reading")));
     } else {
-      const numeric = w.unlimited ? t("Unlimited") : (w.how === "p" ? "≈ " : "") + quotaTotalNumber(w.left);
-      item.append(el("b", "quota-total-value", numeric));
-      item.append(el("span", "quota-total-unit", t(w.how === "p" ? "full-account allowances" : w.unit || "Left")));
-      const info = w.how === "p" ? t("Average {n}% left · {accounts} accounts", { n: quotaTotalNumber(w.percentLeft), accounts: w.accounts })
+      const numeric = w.unlimited ? t("Unlimited") : quotaTotalNumber(w.how === "p" ? w.percentLeft : w.left) + (w.how === "p" ? "%" : "");
+      const value = el("b", "quota-total-value", numeric);
+      if (w.how === "p") {
+        const ring = el("div", "quota-total-ring"), center = el("div", "quota-total-center");
+        ring.style.setProperty("--quota-left", to100(w.percentLeft) + "%");
+        ring.setAttribute("role", "meter");
+        ring.setAttribute("aria-label", name + " · " + t("Left"));
+        ring.setAttribute("aria-valuemin", "0");
+        ring.setAttribute("aria-valuemax", "100");
+        ring.setAttribute("aria-valuenow", to100(w.percentLeft));
+        ring.setAttribute("aria-valuetext", numeric);
+        center.append(value, el("span", "quota-total-unit", t("Left")));
+        ring.append(center); item.append(ring);
+      } else {
+        item.append(value, el("span", "quota-total-unit", t(w.unit || "Left")));
+      }
+      const info = w.how === "p" ? t("{n} accounts", { n: w.accounts })
         : t(w.unlimited ? "Unlimited on each of {n} accounts" : "Added up over {n} accounts", { n: w.accounts });
       item.append(el("span", "quota-total-info", info));
       if (!w.unlimited && w.how !== "b") {
         item.classList.toggle("low", w.percentLeft > 0 && w.percentLeft <= 20);
         item.classList.toggle("empty", w.percentLeft <= 0);
-        const bar = el("div", "quota-track"), fill = el("i");
-        fill.style.width = to100(w.percentLeft) + "%";
-        bar.append(fill); item.append(bar);
+        if (w.how !== "p") {
+          const bar = el("div", "quota-track"), fill = el("i");
+          fill.style.width = to100(w.percentLeft) + "%";
+          bar.append(fill); item.append(bar);
+        }
       }
     }
     const omitted = (w.unknown || 0) + (w.missing || 0);

@@ -291,10 +291,13 @@ and focus highlights resolve the enclosing account by its card identity.
 
 `quotaOverview` in quotaall.js always shows what is left, independently of
 the Used / Left preference that still controls account meters. Percentage
-windows show the sum of remaining shares in full-account equivalents
-(ten accounts with 20% left are approximately two full accounts), together
-with the average and contributing count. Actual counts and wallets retain
-their units. Totals are kept apart by provider, source, plan, window, model
+windows show one ring per period, filled by the remaining percentage of
+the combined allowance on that plan (ten accounts with 20% left show 20%).
+The percentage sits in the center, with the contributing count below;
+there is no full-account-equivalent figure. OpenCode Go's overview uses
+5h, 7d and 30d labels; its monthly reset still comes from the vendor.
+Actual counts and wallets retain their units. Totals are kept apart by
+provider, source, plan, window, model
 family, pool and unit; windows are independent limits, not additive periods.
 Even a single-account group can have a total. Precision is retained until
 formatting, and a nonzero total below 0.01 is shown as less than 0.01.

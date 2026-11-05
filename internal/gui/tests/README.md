@@ -2707,7 +2707,8 @@ screenshots.
 ## Independent allowance cards
 
 `usage-overview-cards.test.cjs` uses the reported OpenCode Go percentages
-on eight accounts. It checks three independent period totals, account
+on eight accounts. It checks three percentage rings for 5h, 7d and 30d,
+their accessible values, circular shape and centered text, account
 boundaries, meter text staying in its column, Used / Left leaving totals
 unchanged, low-allowance labels, account-only refresh and hiding. Both
 engines, all five languages, both themes, 1440px and 390px. `ARTIFACT_DIR`

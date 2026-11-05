@@ -1,4 +1,4 @@
-// Overview totals always show remaining, in full-account equivalents or
+// Overview totals always show remaining, as percentage rings or
 // their actual units, with a card per account. The tray and Routing keep
 // their compact aggregate and Used / Left semantics. Both engines, all
 // languages, with isolated API fixtures. SHOTS keeps screenshots.
@@ -122,7 +122,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator('#subscriptionUsage > [data-key="codex"] .quota-total').count(), 2, "each plan stays separate, even with one account");
         assert.equal(await page.locator('#subscriptionUsage > [data-key="kimi"] .quota-total').count(), 1);
         const max = page.locator('#subscriptionUsage > [data-key="claude"] .quota-total-value');
-        assert.deepEqual(await max.allTextContents(), ["≈ 1", "≈ 1.3"]);
+        assert.deepEqual(await max.allTextContents(), ["50%", "65%"]);
         assert.ok(await page.evaluate(() => { const [a, b] = document.querySelectorAll('#subscriptionUsage > [data-key="claude"] .quota-total'); return Math.abs(a.getBoundingClientRect().top - b.getBoundingClientRect().top) < 1; }), "side by side");
         assert.deepEqual(await fits(page, ".quota-overview"), []);
         await shot(page, `usage-${engine}-${lang}-${theme}`);
@@ -208,7 +208,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const strip = page.locator('#subscriptionUsage > [data-key="codex"] .quota-overview');
       await strip.waitFor();
       await page.locator("#quotaMode .opt").nth(1).click();
-      assert.deepEqual(await strip.locator(".quota-total-value").allTextContents(), ["≈ 0", "≈ 0.22"]);
+      assert.deepEqual(await strip.locator(".quota-total-value").allTextContents(), ["0%", "5.5%"]);
+      assert.equal(await strip.getByRole("meter").first().getAttribute("aria-valuenow"), "0");
       assert.equal(await strip.locator(".quota-total").first().locator(".quota-total-note").count(), 1, "held accounts are named in the summary");
       assert.equal(await page.locator(".quota-account-card .quota-held-note").count(), 3, "each affected account explains its full-looking window");
       assert.deepEqual(await fits(page, ".quota-overview"), []);

@@ -14,11 +14,11 @@ const words = {
   ja: ["残りの合計", "アカウント満額分", "今月：残り 6%"],
   de: ["Insgesamt übrig", "volle Kontingente", "Monat: 6% übrig"],
 };
-function fixture(lang, theme) {
+function fixture(lang, theme, readings) {
   const now = Date.now(), at = (h) => new Date(now + h * 3600e3).toISOString();
   const weeks = [100, 99, 100, 62, 27, 8, 6, 7], months = [6, 9, 10, 9, 7, 10, 31, 47];
   const settings = { lang, theme, quotaLeft: true, currency: "usd" };
-  const quotas = weeks.map((week, i) => ({ provider: "opencode-go", name: "OpenCode Go", kind: "plan", icon: "generic", user: "oc_s…" + ["EZgR", "Mvjj", "erl2", "kkiu", "9x9Y", "oRiC", "3Uvx", "8HwR"][i], readAt: at(0), windows: [
+  const quotas = readings || weeks.map((week, i) => ({ provider: "opencode-go", name: "OpenCode Go", kind: "plan", icon: "generic", user: "oc_s…" + ["EZgR", "Mvjj", "erl2", "kkiu", "9x9Y", "oRiC", "3Uvx", "8HwR"][i], readAt: at(0), windows: [
     { name: "5 hours", used: 0 }, { name: "7 days", used: 100 - week, resetsAt: at(100) }, { name: "Month", used: 100 - months[i], resetsAt: at(300) },
   ] }));
   return async (r) => {
@@ -61,8 +61,16 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       await summary.waitFor();
       assert.equal(await cards.count(), 8);
       assert((await summary.innerText()).includes(words[lang][0]));
-      assert((await summary.innerText()).includes(words[lang][1]));
-      assert.deepEqual(await summary.locator(".quota-total-value").allTextContents(), ["≈ 8", "≈ 4.09", "≈ 1.29"]);
+      assert(!(await summary.innerText()).includes(words[lang][1]), "no full-account equivalents");
+      assert.deepEqual(await summary.locator(".quota-total-name").allTextContents(), ["5h", "7d", "30d"]);
+      assert.deepEqual(await summary.locator(".quota-total-value").allTextContents(), ["100%", "51.13%", "16.13%"]);
+      const rings = summary.getByRole("meter");
+      assert.equal(await rings.count(), 3);
+      for (const [i, value] of [100, 51.125, 16.125].entries()) {
+        assert(Math.abs(Number(await rings.nth(i).getAttribute("aria-valuenow")) - value) < 1e-8);
+        assert.equal(await rings.nth(i).getAttribute("aria-valuemin"), "0");
+        assert.equal(await rings.nth(i).getAttribute("aria-valuemax"), "100");
+      }
       assert.equal(await cards.first().locator(".quota-account-state").textContent(), words[lang][2]);
       const original = await summary.innerText();
       for (const width of [1440, 390]) {
@@ -88,6 +96,15 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
           return bad;
         }));
         assert.deepEqual(bad, []);
+        assert.deepEqual(await rings.evaluateAll((rs) => rs.flatMap((ring) => {
+          const r = ring.getBoundingClientRect(), v = ring.querySelector(".quota-total-value").getBoundingClientRect();
+          const bad = [];
+          if (Math.abs(r.width - r.height) > 1) bad.push(`ring isn't circular: ${r.width} × ${r.height}`);
+          if (v.left < r.left + 6 || v.right > r.right - 6) bad.push("percentage crosses ring");
+          if (ring.scrollWidth > ring.clientWidth + 1) bad.push("ring overflows");
+          if (!getComputedStyle(ring).backgroundImage.includes("conic-gradient")) bad.push("ring isn't drawn");
+          return bad;
+        })), []);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (process.env.ARTIFACT_DIR && lang === "zh") {
           await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
@@ -104,14 +121,44 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       assert.equal(await cards.nth(1).locator(".quota-acct-fold").getAttribute("aria-expanded"), "true");
       assert.equal(await cards.nth(2).locator(".quota-acct-fold").getAttribute("aria-expanded"), "false");
       await cards.first().locator(".quota-refresh").first().click();
-      await page.waitForFunction(() => document.querySelector(".quota-overview .quota-total:last-child .quota-total-value").textContent === "≈ 1.38");
+      await page.waitForFunction(() => document.querySelector(".quota-overview .quota-total:last-child .quota-total-value").textContent === "17.25%");
       assert((await cards.nth(1).locator(".quota-live .quota-n").last().textContent()).includes("91%"), "refresh didn't change neighbor");
       await cards.nth(1).locator(".quota-live").click({ button: "right" });
       await page.locator(".row-menu button").first().click();
       await page.waitForFunction(() => document.querySelectorAll(".quota-account-card").length === 7);
       assert((await cards.first().innerText()).includes("EZgR"), "hide targeted the clicked account");
-      assert.equal(await summary.locator(".quota-total-value").first().textContent(), "≈ 7");
+      assert.deepEqual(await summary.locator(".quota-total-value").allTextContents(), ["100%", "44.29%", "18.43%"]);
       assert.deepEqual(errors, []);
     });
   }
+  test(`${engine}: remaining rings distinguish empty, tiny, partial and stale readings`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 390, height: 900 }, reducedMotion: "reduce" });
+    const base = { provider: "opencode-go", name: "OpenCode Go", kind: "plan", icon: "generic", user: "example" };
+    const readings = [];
+    await page.route("**/*", fixture("en", "light", readings));
+    await page.addInitScript(() => localStorage.setItem("magpie.quotaRange", "off"));
+    const past = new Date(Date.now() - 86400e3).toISOString();
+    for (const sample of [
+      { windows: [{ name: "5 hours", used: 100 }], value: "0%", meter: 0, state: "empty" },
+      { windows: [{ name: "5 hours", used: 80 }], value: "20%", meter: 20, state: "low" },
+      { windows: [{ name: "5 hours", used: 99.999 }], value: "<0.01%", meter: 0.001, state: "low" },
+      { windows: [{ name: "5 hours", used: 50 }], value: "50%", meter: 50, failed: true },
+      { windows: [{ name: "5 hours", used: 20, resetsAt: past }], asOf: past, value: "Awaiting a new reading" },
+    ]) {
+      readings.splice(0, readings.length, { ...base, windows: sample.windows, asOf: sample.asOf });
+      if (sample.failed) readings.push({ ...base, user: "unread", error: "Unavailable", windows: [] });
+      await page.goto("http://magpie.test/?view=usage");
+      const summary = page.locator(".quota-overview");
+      await summary.waitFor();
+      assert.equal(await summary.locator(".quota-total-value").textContent(), sample.value);
+      const ring = summary.getByRole("meter");
+      assert.equal(await ring.count(), sample.meter == null ? 0 : 1);
+      if (sample.meter != null) assert(Math.abs(Number(await ring.getAttribute("aria-valuenow")) - sample.meter) < 1e-8);
+      if (sample.state) assert.equal(await summary.locator(".quota-total." + sample.state).count(), 1);
+      if (sample.failed || sample.asOf) assert((await summary.locator(".quota-total-note").textContent()).includes("1 not counted"));
+      if (sample.asOf) assert.equal(await summary.locator(".quota-total.empty").count(), 0, "unknown isn't zero");
+    }
+  });
 }
