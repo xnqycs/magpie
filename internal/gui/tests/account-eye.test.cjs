@@ -1,3 +1,4 @@
+const reader = require("./reader.cjs");
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // One account shown while Hide accounts hides the rest (yogurt36 on
 // Discord, for a screen share): with Hide accounts on, an account's name
@@ -289,6 +290,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang));
         await page.goto("http://magpie.test/?view=usage");
+        await page.locator(".quota-overview").first().waitFor();
         await page.locator(".subscription-account .quota-alias").first().waitFor();
         const card = (id) => page.locator(".subscription-account", { has: page.locator(".quota-of", { hasText: id }) });
         assert.equal(await opacity(card(ME).locator(".acct-eye")), "none");
@@ -297,6 +299,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelectorAll(".subscription-account .quota-of .pii").length === 2);
         const eye = (id) => page.locator(".subscription-account .acct-eye").nth(id === TEAM ? 0 : 1);
         assert.equal(await opacity(eye(ME)), "0");
+        await reader.inView(page, eye(ME));
         await page.locator(".subscription-account").nth(1).hover();
         assert.equal(await opacity(eye(ME)), "1");
         const sc = await scrolled(page);

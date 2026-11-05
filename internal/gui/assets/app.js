@@ -14413,7 +14413,7 @@ function ringName(w) {
   return w.window ? poolWord(w.pool) + " " + shortWindow(w.window) : shortWindow(w.name);
 }
 
-// quotaall.js: accounts together, loaded once asked for
+// quotaall.js: overview totals and compact aggregates, loaded on demand
 function quotaAllJS() {
   return (quotaAllJS.p ||= import("./quotaall.js").then(() => renderQuotas(), () => {}));
 }
@@ -15904,6 +15904,7 @@ function renderQuotas(lazy) {
   const subscriptions = $("#subscriptionUsage");
   const restoreFlash = keepQuotaFlash(subscriptions);
   const restoreRefresh = keepQuotaRefresh(subscriptions);
+  const restorePosition = keepOverviewPosition();
   subscriptions.replaceChildren();
   // the allowances' own heading, apart from the period's cost: used or
   // left turns their meters, and is only there when some card has one (a
@@ -15938,7 +15939,7 @@ function renderQuotas(lazy) {
   // less the ones hidden from it (overviewCards, the Usage page's)
   const shown = overviewCards(quotas);
   subscriptions.hidden = !shown.length;
-  // an agent with several accounts is one card, a section per account
+  // One provider section holds its summary and independent account cards.
   const groups = [];
   for (const sub of byUsageOrder(keyCards(shown))) {
     const g = sub.user && groups.find((x) => x[0].user && x[0].provider === sub.provider);
@@ -15949,17 +15950,13 @@ function renderQuotas(lazy) {
     // several accounts: each in full or in brief, its bars without the
     // rest (whqtian, ARNO)
     const several = subs.length > 1;
-    const card = el("div", "subscription-card" + (first.user ? " several" : ""));
+    const card = el("div", "subscription-card usage-provider" + (first.user ? " several" : ""));
     card.dataset.key = first.provider;
     card.dataset.provider = first.provider;
     if (!first.user) card.dataset.card = first.provider;
     if (!first.user && first.balanceCard) card.dataset.balCard = first.balanceCard;
     const head = el("div", "subscription-head");
     head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", quotaName(first)));
-    // a card with no account's name to it (a plugin's ZCode) is named in
-    // its head, as the user named it or for the key plan it stands in for
-    if (!first.user && first.alias) head.append(...quotaWho(first));
-    if (!first.user && (first.plan || first.until)) head.append(planSpan(first));
     card.append(head);
     quotaCardMenus(card, subs); // the card's hide menu (page.js)
     // a provider's keys, each its balance: past a few, the rest folded
@@ -15972,25 +15969,33 @@ function renderQuotas(lazy) {
       s.title = keysSumTip(subs);
       head.append(s);
     }
-    const all = !keys && several && quotaAllOf(subs);
+    const all = !keys && (window.quotaOverview ? quotaOverview(subs) : void quotaAllJS());
     if (all) card.append(all);
     // many accounts (Linx on X: twenty-odd on one plugin, 顶成擎天柱):
     // the same, each still a row of its own
     const accts = !keys && several && subs.length > ACCTS_FOLD;
     const folded = keys ? keysFolded(subs) : accts ? acctsFolded(subs) : new Set();
+    const accounts = el("div", "quota-accounts");
+    card.append(accounts);
     for (const sub of subs) {
       if (folded.has(sub)) continue;
       // "Every model" by the account, or the card's name: where the click
       // was, whichever way the meters under it grow or shrink
-      const brief = several && !usageAcctOpen(sub, subs);
+      const brief = !usageAcctOpen(sub, subs);
       const history = !brief && quotaHistoryView(sub);
       const shownSub = history ? quotaHistoryCard(sub, history) : sub;
-      const [meters, every] = history ? [quotaWindows(shownSub), null] : familyQuota(sub);
-      if (sub.user) {
+      const [meters, every] = familyQuota(sub);
+      const account = el("article", "quota-account-card");
+      account.dataset.card = trayCardID(sub);
+      if (sub.balanceCard) account.dataset.balCard = sub.balanceCard;
+      accounts.append(account);
+      const detail = el("div", "quota-account-details");
+      detail.hidden = brief;
+      {
         const who = el("div", "subscription-account" + (brief ? " brief" : ""));
         who.dataset.card = trayCardID(sub);
-        if (sub.balanceCard) who.dataset.balCard = sub.balanceCard;
-        who.append(...quotaWho(sub));
+        if (sub.user || sub.alias) who.append(...quotaWho(sub));
+        else who.append(el("span", "user", quotaName(sub)));
         const warm = quotaWarm(sub);
         if (warm) who.append(warm);
         // in brief, its resets and whether it uses them by itself (#719)
@@ -15998,42 +16003,55 @@ function renderQuotas(lazy) {
         if (auto) who.append(auto);
         if (sub.plan || sub.until) who.append(planSpan(sub));
         if (every) who.append(every);
-        if (several) who.append(usageAcctFold(sub, !brief));
-        card.append(who);
-      } else if (every) head.append(every);
-      // in brief: each window's name, figure and bar, when it resets in
-      // its tooltip; the curve and the rest only in full
+        who.append(usageAcctFold(sub, !brief));
+        account.append(who);
+      }
+      const stateLine = overviewAccountState(sub);
+      if (stateLine) account.append(stateLine);
+      // Live meters and reset times stay visible; extra details fold.
       if (brief) meters.classList.add("brief");
-      card.append(meters);
+      meters.classList.add("quota-live");
+      account.append(meters);
+      let past = null;
+      if (history) {
+        past = el("div", "quota-history");
+        past.append(el("div", "quota-history-label", t("Historical allowance")), quotaWindows(shownSub));
+        const recorded = readWhen(shownSub, false);
+        if (recorded) past.append(recorded);
+      }
       // a remote magpie's gateway key: what its windows don't say (#1547)
       const keyLine = !brief && !history && keyLimitLine(sub);
-      if (keyLine) card.append(keyLine);
+      if (keyLine) detail.append(keyLine);
       // how many of the period's requests to it magpie made itself (#1839)
       const own = !brief && !history && ownLine(sub);
-      if (own) card.append(own);
+      if (own) detail.append(own);
       // WorkBuddy's, Trae CN's or MiniMax Code's daily check-in, how this account's went,
       // and the switch for it, on the card rather than only in Settings
       // (#694); the switch on the first card of each vendor's
-      if (sub.checkins && !history) card.append(checkinRow(sub, sub === subs.find((x) => x.checkins && (x.checkinBy || "") === (sub.checkinBy || "")), subs));
+      if (sub.checkins && !history) detail.append(checkinRow(sub, sub === subs.find((x) => x.checkins && (x.checkinBy || "") === (sub.checkinBy || "")), subs));
       // what was left over time, against an even burn (#651)
       const curve = !brief && !sub.error && quotaCurve(sub);
-      if (curve) card.append(curve);
+      if (curve) detail.append(curve);
+      if (past) detail.append(past);
       // the account's credits, day by day, as magpie counted them (#568):
       // each pool on its own, named when there are several (#3321)
       if (!brief && !history && sub.daily && !sub.error) {
         const pools = [sub.daily, ...(sub.moreDaily || [])];
-        for (const d of pools) card.append(creditDays(d, pools.length > 1));
+        for (const d of pools) detail.append(creditDays(d, pools.length > 1));
       }
       // what is left besides the windows, under them
-      if (!history && sub.balance && sub.windows?.length && !sub.error) card.append(balanceRow(sub, "What is left on the account besides its windows", false));
+      if (!brief && !history && sub.balance && sub.windows?.length && !sub.error) detail.append(balanceRow(sub, "What is left on the account besides its windows", false));
       // the balance over time, and when it runs out at that pace
       const spend = !brief && !history && !sub.error && balanceCurve(sub);
-      if (spend) card.append(spend);
+      if (spend) detail.append(spend);
       // when the windows were read: "Updated 3 min ago", or the time of
       // ones standing in for a reading that failed just now (#802; a
       // balance alone says it in its row)
-      const read = !brief && sub.windows?.length && !sub.error && readWhen(shownSub, true);
-      if (read) card.append(read);
+      const read = sub.windows?.length && !sub.error && (readWhen(sub, true) || el("div", "quota-read"));
+      if (read) {
+        if (!read.querySelector(".quota-refresh")) read.append(quotaRefresh(sub));
+        account.append(read);
+      }
       if (!brief && !history && sub.resets?.count) {
         const r = el("div", "quota-resets");
         r.append(resetsWords(sub.resets, sub));
@@ -16045,14 +16063,15 @@ function renderQuotas(lazy) {
           use.onclick = () => askReset(sub);
           r.append(use);
         }
-        card.append(r);
+        detail.append(r);
       }
       // the account's standing say on its resets, held or not (#719)
       const policy = !brief && !history && autoResetRow(sub, "quota-autoreset");
-      if (policy) card.append(policy);
+      if (policy) detail.append(policy);
       // and on its credits, when its windows run out
       const credits = !brief && !history && creditsRow(sub, "quota-credits");
-      if (credits) card.append(credits);
+      if (credits) detail.append(credits);
+      account.append(detail);
     }
     // in the card's head, beside its name, of the keys in sight (the
     // folded ones are the foot's button's)
@@ -16063,6 +16082,7 @@ function renderQuotas(lazy) {
   }
   markUpstream();
   packUsageNow(subscriptions);
+  restorePosition();
   restoreFlash();
   restoreRefresh();
   requestAnimationFrame(focusQuotaCard);
@@ -16243,89 +16263,24 @@ function keyCards(list) {
   return gone.size ? list.filter((q) => !gone.has(q)).map((q) => merged.get(q) || q) : list;
 }
 
-// packUsage lays the Usage cards in 260px columns, the next card to the
-// column that ends highest, the order still the page's (#860); each
-// column's last reaches the tallest's end (ikunbots on X).
-const USAGE_MIN = 260, USAGE_GAP = 7;
-let usagePacked = null, usagePackFrame = 0;
+// Fit the meters after a provider section or its account grid changes size.
+let usagePackFrame = 0;
 function packUsage() {
-  const list = $("#subscriptionUsage");
   if (usagePackFrame) { cancelAnimationFrame(usagePackFrame); usagePackFrame = 0; }
+  const list = $("#subscriptionUsage");
   if (!list || list.classList.contains("sorting")) return;
-  const cards = [...list.children], width = list.clientWidth;
-  if (!width || !cards.length) {
-    // out of sight: the grid as it is without packing, packed once it shows
-    list.classList.remove("packed");
-    list.style.gridTemplateColumns = "";
-    for (const c of cards) { c.style.gridArea = ""; c.style.minHeight = ""; }
-    usagePacked = null;
-    return;
+  for (const grid of list.querySelectorAll(".quota-accounts")) {
+    const n = Math.max(1, Math.min(3, grid.children.length, Math.floor((grid.clientWidth + 12) / 372)));
+    const columns = `repeat(${n}, minmax(0, 1fr))`;
+    if (grid.style.gridTemplateColumns !== columns) grid.style.gridTemplateColumns = columns;
   }
-  const keys = cards.map((c) => c.dataset.key || "").join();
-  const most = Math.max(1, Math.min(cards.length, Math.floor((width + USAGE_GAP) / (USAGE_MIN + USAGE_GAP))));
-  const place = (n, hs) => {
-    const ends = Array(n).fill(0), at = [];
-    for (const h of hs.map(Math.ceil)) {
-      // the leftmost of those ending within a pixel of the highest
-      const low = Math.min(...ends), c = ends.findIndex((e) => e <= low + 1);
-      at.push([c, ends[c], h]);
-      ends[c] += h + USAGE_GAP;
-    }
-    const tall = Math.max(...ends) - USAGE_GAP;
-    // what stands empty under the columns' ends, by the columns' width
-    const empty = ends.reduce((s, e) => s + tall - (e - USAGE_GAP), 0) * (width - (n - 1) * USAGE_GAP) / n;
-    return { n, at, tall, empty };
-  };
-  const heights = () => {
-    for (const c of cards) c.style.minHeight = "";
-    for (const g of list.querySelectorAll(".quota-windows")) fitQuota(g);
-    return cards.map((c) => c.getBoundingClientRect().height);
-  };
-  const columns = (n) => { list.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`; };
-  let best;
-  if (usagePacked && usagePacked.most === most && usagePacked.keys === keys && list.classList.contains("packed")) {
-    // the same cards, as many columns fitting: the columns as they are
-    best = place(usagePacked.n, heights());
-  } else {
-    list.classList.remove("packed");
-    for (const c of cards) c.style.gridArea = "";
-    for (let n = most; n >= Math.max(1, most - 1); n--) {
-      columns(n);
-      const p = place(n, heights());
-      if (!best) best = p;
-      else if (p.tall <= best.tall * 1.3 && p.empty < best.empty * 0.6) best = p;
-    }
-    // measured again: a count beside its name or under it is the width's
-    columns(best.n);
-    best = place(best.n, heights());
-  }
-  usagePacked = { most, keys, n: best.n };
-  list.classList.add("packed");
-  // the last card in each column, down to the end of the tallest
-  const last = new Map(best.at.map(([c], i) => [c, i]));
-  best.at.forEach(([c, top, h], i) => {
-    if (last.get(c) === i) h = best.tall - top;
-    const area = `${top + 1} / ${c + 1} / span ${Math.max(1, h)} / span 1`;
-    if (cards[i].style.gridArea !== area) cards[i].style.gridArea = area;
-    const min = last.get(c) === i ? `${h}px` : "";
-    if (cards[i].style.minHeight !== min) cards[i].style.minHeight = min;
-  });
+  for (const g of list.querySelectorAll(".quota-windows")) fitQuota(g);
 }
-// a card's height or the page's width moved: packed again on the next frame
-// (in the observer's own call the change is owed to it in the same frame,
-// which WebKit reports as a ResizeObserver loop). A packed card is held to
-// the rows it was given, so one whose content only shrinks (a curve made
-// small again) keeps its own size: what is in it is watched too (#2059,
-// mengyianx: 剩余额度走势 closed left the box as tall as when open).
 const usagePack = new ResizeObserver(() => { if (!usagePackFrame) usagePackFrame = requestAnimationFrame(packUsage); });
 function packUsageNow(list) {
   packUsage();
   usagePack.disconnect();
   usagePack.observe(list);
-  for (const card of list.children) {
-    usagePack.observe(card);
-    for (const part of card.children) usagePack.observe(part);
-  }
 }
 
 // usageHandle is a card's logo, which is also its handle: drag it to move
@@ -17102,10 +17057,10 @@ function flashCard(card, target = card, elapsed = 0) {
 // to its replacement, preserving scroll position and the remaining duration.
 function keepQuotaFlash(box) {
   const view = box.closest(".view"), scroll = view?.scrollTop;
-  const flashes = [...box.querySelectorAll(".subscription-card.flash, .pq-card.flash")].flatMap((card) => {
+  const flashes = [...box.querySelectorAll(".subscription-card.flash, .quota-account-card.flash, .pq-card.flash")].flatMap((card) => {
     const animation = card.getAnimations().find((a) => a.animationName === "flash");
     if (!animation) return [];
-    const selector = card.matches(".pq-card") ? `.pq-card[data-card="${CSS.escape(card.dataset.card)}"]`
+    const selector = card.matches(".pq-card, .quota-account-card") ? `.${card.matches(".pq-card") ? "pq-card" : "quota-account-card"}[data-card="${CSS.escape(card.dataset.card)}"]`
       : `.subscription-card[data-provider="${CSS.escape(card.dataset.provider)}"]`;
     return [{ selector, elapsed: animation.currentTime || 0 }];
   });
@@ -17143,7 +17098,7 @@ function focusQuotaCard() {
     return;
   }
   quotaFocus = "";
-  flashCard(target.closest(".subscription-card, .pq-card"), target);
+  flashCard(target.closest(".quota-account-card, .subscription-card, .pq-card"), target);
 }
 
 // Go calls this when a menu-bar quota cell opens the panel.
@@ -18331,6 +18286,10 @@ function fitQuotas() {
   quotaFitting.clear();
 }
 function fitQuota(g) {
+  if (g.classList.contains("quota-live")) {
+    g.style.setProperty("--quota-columns", Math.max(1, Math.min(3, g.children.length)));
+    g.classList.toggle("quota-stack", g.clientWidth < 330);
+  }
   // a count's own width, its parts laid end to end: once stacked it spans
   // the row and may be two lines, so its box no longer says
   const wide = (e) => [...e.children].reduce((w, c) => w + c.getBoundingClientRect().width, 0) + 4 * (e.children.length - 1);
@@ -18546,7 +18505,7 @@ function familyQuota(sub) {
   b.onclick = () => {
     if (everyModel.has(key)) everyModel.delete(key); else everyModel.add(key);
     const next = shown();
-    if (box.classList.contains("brief")) next.classList.add("brief");
+    for (const cls of ["brief", "quota-live"]) if (box.classList.contains(cls)) next.classList.add(cls);
     box.replaceWith(next);
     box = next;
     label();
@@ -18646,6 +18605,11 @@ function quotaWindows(sub) {
   const windows = el("div", "quota-windows");
   for (const w of sub.windows) {
     const quota = el("div", "quota");
+    if (!w.unlimited && !quotaNoShare(w) && !w.historyMissing) {
+      quota.classList.toggle("quota-low", w.used >= 80 && w.used < 100);
+      quota.classList.toggle("quota-empty", w.used >= 100);
+      quota.classList.toggle("quota-held", !!w.heldBy);
+    }
     const labels = el("div", "quota-labels");
     // the count and its share in parts, so a count too long for its
     // window's width goes to a second line at the · rather than cut short
@@ -18664,6 +18628,7 @@ function quotaWindows(sub) {
     if (w.historyMissing) track.style.visibility = "hidden";
     track.append(fill);
     quota.append(labels);
+    if (w.heldBy) quota.append(el("span", "quota-held-note", t("Limited by {window}", { window: t(w.heldBy) })));
     if (!w.unlimited && !quotaNoShare(w)) quota.append(track);
     // when it starts again, on the clock and how long until then
     let r = null;

@@ -2631,12 +2631,13 @@ on their own cycle, missing short-window history is not invented, and
 selecting a cycle does not scroll. `MAGPIE_QUOTA_ASSETS` selects an older
 assets directory to verify the regression fails before the picker existed.
 
-Historical quota selections also update the 5-hour and weekly meters from
-the last readings inside the selected interval. The cycle menu describes
+Historical quota selections show separate 5-hour and weekly meters inside
+the selected account's details, using the last readings in that interval.
+Its main meters and the provider's remaining totals stay current. The cycle menu describes
 observed duration rather than the nominal window name. Regression checks
 cover missing windows, historical end and sampling dates, Used/Left,
-restoring live values on 2 days/current cycle, and hiding live account
-controls while inspecting history.
+removing historical detail meters on 2 days/current cycle, and hiding live
+account controls inside the details while inspecting history.
 
 
 `quota-curve.test.cjs` also checks that a completed cycle loads its own
@@ -2702,3 +2703,24 @@ tone, #26251E. It checks that the row draws that picture as a mask in the
 text colour, and that it shows in both themes, all five languages, at 980px
 and 420px, in Chromium and WebKit (chen2652). `ARTIFACT_DIR` keeps the row's
 screenshots.
+
+## Independent allowance cards
+
+`usage-overview-cards.test.cjs` uses the reported OpenCode Go percentages
+on eight accounts. It checks three independent period totals, account
+boundaries, meter text staying in its column, Used / Left leaving totals
+unchanged, low-allowance labels, account-only refresh and hiding. Both
+engines, all five languages, both themes, 1440px and 390px. `ARTIFACT_DIR`
+keeps Chinese desktop and narrow screenshots. All API replies are local
+fixtures; no vendor or user configuration is accessed.
+
+`usage-merge.test.cjs` also checks the overview's raw remaining sums,
+single-account groups, plan/provider/pool separation, missing and expired
+readings, held windows, actual units, overage and small nonzero values.
+`MAGPIE_QUOTA_JS` can select an older quotaall.js to demonstrate the
+regressions fail before this change. `usage-all-accounts.test.cjs` retains
+coverage of the tray and Routing page's compact aggregate semantics.
+
+```sh
+node --test internal/gui/tests/usage-merge.test.cjs internal/gui/tests/usage-overview-cards.test.cjs
+```

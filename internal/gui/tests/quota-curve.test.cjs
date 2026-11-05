@@ -7,8 +7,8 @@
 // (ARNO on Discord: the curves made the cards cluttered), which draws no
 // curve on any card, the tray's thin line included; each account can pick
 // an earlier recorded cycle in Cycle mode. The global pick is remembered
-// across a reload, and no click moves the page. Several accounts on a card
-// are set apart by a rule, a curve's legend before the next one too. An
+// across a reload, and no click moves the page. Historical meters live in
+// their account's details; the main meters always stay current. An
 // account with no readings has no curve. The tray's card has a low line of
 // its first window's cycle, with no now line (#1601), and a click into the
 // tray's list rings nothing.
@@ -18,6 +18,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const vm = require("node:vm");
+const reader = require("./reader.cjs");
 const { chromium, webkit } = require("playwright");
 
 const assets = process.env.MAGPIE_QUOTA_ASSETS || path.resolve(__dirname, "../assets");
@@ -107,26 +108,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const otherAxis = await other.locator(".qc-axis").textContent();
       const currentAxis = await curve.locator(".qc-axis").textContent();
       const currentLegend = await curve.locator(".qc-key").allTextContents();
-      const meters = card.locator(".quota-windows").first();
+      const live = card.locator(".quota-account-card").first().locator(".quota-live");
+      let meters = live;
       const currentMeters = await meters.locator(".quota-n").allTextContents();
       assert.equal(await meters.locator(".quota-holds").count(), 1, "the current view keeps upstream's whole-window estimate");
-      const otherMeters = await card.locator(".quota-windows").nth(1).locator(".quota-n").allTextContents();
+      const otherMeters = await card.locator(".quota-account-card").nth(1).locator(".quota-live").locator(".quota-n").allTextContents();
       const pick = curve.getByRole("button", { name: w.choose });
       // this cycle's pace is said; a past cycle's is over and says none (#2079)
       assert.notEqual(await curve.locator(".qc-pace").textContent(), "", "the current cycle tells its pace");
       for (const [index, left] of [[1, 30], [2, 70], [3, 20]]) {
+        await reader.inView(page, pick);
         const before = await page.locator("#view-usage").evaluate((v) => v.scrollTop);
-        await pick.click();
+        await reader.click(page, pick);
         const items = page.locator(".sess-menu .pm-item");
         assert.equal(await items.count(), 4, "current + three observed cycles");
         const notes = await items.locator(".pm-note").allTextContents();
         assert.ok(notes.slice(1).every((note) => note.startsWith(w.duration)), "menu describes the observed duration, not the window's nominal name");
         assert.notEqual(notes[1], notes[2], "a regular week and an early reset have different lengths");
         await items.nth(index).click();
+        meters = card.locator(".quota-history .quota-windows");
         assert.equal(await pick.textContent(), w.past);
         assert.equal(await curve.locator(".qc-pace").textContent(), "", "a past cycle has no pace to tell");
         const hasShort = index === 2;
-        await page.waitForFunction((n) => document.querySelector('.subscription-card[data-key="codex"] .quota-windows').querySelectorAll(".quota-holds").length === n, hasShort ? 2 : 1);
+        await page.waitForFunction((n) => document.querySelector('.subscription-card[data-key="codex"] .quota-history .quota-windows').querySelectorAll(".quota-holds").length === n, hasShort ? 2 : 1);
         const estimates = await meters.locator(".quota-holds").allTextContents();
         assert.ok(estimates.every((text) => !text.includes("100K") && !text.includes("$12")), "today's estimate is never used for history");
         assert.equal(await meters.locator(".quota-holds").count(), hasShort ? 2 : 1, "historical estimates follow the sampled windows");
@@ -135,44 +139,46 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (hasShort) assert.match(await meters.locator(".quota-n").first().textContent(), /88%/, "the 5-hour meter uses its last reading inside that cycle");
         else assert.equal(await meters.locator(".quota-n").first().textContent(), w.missing, "missing history never shows today's meter");
         assert.ok((await meters.locator(".quota-reset").allTextContents()).every((text) => text.startsWith(w.ended)), "historical dates aren't current countdowns");
-        assert.ok((await card.locator(".quota-read").first().textContent()).includes(w.reading));
+        assert.ok((await card.locator(".quota-history .quota-read").first().textContent()).includes(w.reading));
         assert.equal(await card.locator(".quota-autoreset").count(), 1, "only the other account retains current controls");
         assert.equal(await curve.locator("line.qc-now").count(), 0, "now is outside a completed cycle");
         assert.equal(await curve.locator("line.qc-even").count(), hasShort ? 2 : 1, "the historical even pace belongs to the selected cycle");
         assert.equal(await curve.locator("path.qc-line").count(), hasShort ? 2 : 1, "no fabricated short-window readings");
         assert.notEqual(await curve.locator(".qc-axis").textContent(), currentAxis);
         assert.equal(await other.locator(".qc-axis").textContent(), otherAxis, "another account stays on its own cycle");
-        assert.deepEqual(await card.locator(".quota-windows").nth(1).locator(".quota-n").allTextContents(), otherMeters);
+        assert.deepEqual(await card.locator(".quota-account-card").nth(1).locator(".quota-live").locator(".quota-n").allTextContents(), otherMeters);
         assert.equal(await page.locator("#view-usage").evaluate((v) => v.scrollTop), before, "choosing a cycle doesn't scroll");
         const coords = await curve.locator("path.qc-line").first().getAttribute("d");
         assert.ok(!/NaN|Infinity/.test(coords), coords);
       }
-      await meters.locator(".quota-n").nth(1).click();
+      await reader.click(page, meters.locator(".quota-n").nth(1));
       assert.match(await meters.locator(".quota-n").nth(1).textContent(), /20%/, "Left is also the selected cycle's historical value");
       assert.equal(await meters.locator(".quota-n").first().textContent(), w.missing);
-      await meters.locator(".quota-n").nth(1).click();
+      await reader.click(page, meters.locator(".quota-n").nth(1));
       assert.match(await meters.locator(".quota-n").nth(1).textContent(), /80%/);
-      await page.locator("#quotaTrend").click();
+      await reader.click(page, page.locator("#quotaTrend"));
       await page.locator(".sess-menu .pm-item").nth(1).click();
-      assert.deepEqual(await meters.locator(".quota-n").allTextContents(), currentMeters, "2 days restores current meters");
-      await page.locator("#quotaTrend").click();
+      assert.equal(await meters.count(), 0, "2 days removes historical meters");
+      assert.deepEqual(await live.locator(".quota-n").allTextContents(), currentMeters, "live meters stay current");
+      await reader.click(page, page.locator("#quotaTrend"));
       await page.locator(".sess-menu .pm-item").nth(2).click();
       assert.match(await meters.locator(".quota-n").nth(1).textContent(), /80%/, "Cycle resumes the account's selected historical period");
-      await card.locator(".quota-refresh").first().click();
+      await reader.click(page, card.locator(".quota-refresh").first());
       await page.waitForFunction(() => !document.querySelector(".quota-refresh.busy"));
       assert.equal(await pick.textContent(), w.past, "a refresh preserves the selected historical cycle");
       assert.deepEqual(await curve.locator(".qc-key b").allTextContents(), ["20%"]);
-      await pick.click();
+      await reader.click(page, pick);
       await page.locator(".sess-menu .pm-item").first().click();
       assert.equal(await curve.locator(".qc-axis").textContent(), currentAxis);
       assert.deepEqual(await curve.locator(".qc-key").allTextContents(), currentLegend);
-      assert.deepEqual(await meters.locator(".quota-n").allTextContents(), currentMeters, "returning to this cycle restores today's meters");
+      meters = live;
+      assert.deepEqual(await meters.locator(".quota-n").allTextContents(), currentMeters, "returning to this cycle keeps today's meters");
       assert.equal(await meters.locator(".quota-holds").count(), 1, "returning to this cycle restores upstream's whole-window estimate");
       assert.deepEqual(await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth, cards: [...document.querySelectorAll(".subscription-card")].some((c) => c.scrollWidth > c.clientWidth + 1) })), { page: false, cards: false });
       assert.deepEqual(errors, []);
       if (process.env.ARTIFACT_DIR) {
         await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-        await pick.click();
+        await reader.click(page, pick);
         await page.locator(".sess-menu .pm-item").nth(2).click();
         await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-quota-history.png`) });
       }
@@ -324,10 +330,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const second = card.locator(".subscription-account", { hasText: "b@x.com" });
           // (after the curve, a Codex account's Auto-use row, #719, then its
           // Use credits row, which closes its section)
-          assert.deepEqual(await second.evaluate((e) => [e.previousElementSibling.previousElementSibling.previousElementSibling.className, e.previousElementSibling.previousElementSibling.className, e.previousElementSibling.className]), ["quota-curve", "quota-autoreset ar-split", "quota-credits on"]);
-          assert.notEqual(await second.evaluate((e) => getComputedStyle(e).borderTopStyle), "none", "a rule between the accounts");
+          assert.deepEqual(await second.evaluate((e) => [...e.closest(".quota-account-card").previousElementSibling.querySelector(".quota-account-details").children].map((n) => n.className)), ["quota-curve", "quota-autoreset ar-split", "quota-credits on"]);
+          assert.notEqual(await second.evaluate((e) => getComputedStyle(e.closest(".quota-account-card")).borderTopStyle), "none", "each account has its own border");
           const choose = async (name) => {
-            await pick.click();
+            await reader.click(page, pick);
             const items = page.locator(".sess-menu .pm-item");
             assert.deepEqual(await items.locator(".pm-name").allTextContents(), [w.off, w.two, w.cycle]);
             await items.filter({ hasText: name }).click();
@@ -707,35 +713,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.goto("http://magpie.test/?view=usage");
     const card = page.locator('.subscription-card[data-key="codex"]');
     const pick = card.getByRole("button", { name: "Choose a recorded cycle" });
-    await pick.click();
+    await reader.click(page, pick);
     await page.locator(".sess-menu .pm-item").nth(1).click();
-    await page.waitForFunction(() => document.querySelector(".quota-holds-why")?.textContent === "Loading…");
-    await pick.click();
+    await page.waitForFunction(() => document.querySelector(".quota-history .quota-holds-why")?.textContent === "Loading…");
+    await reader.click(page, pick);
     await page.locator(".sess-menu .pm-item").nth(2).click();
-    await page.waitForFunction(() => document.querySelector(".quota-holds")?.textContent.includes("777K"));
+    await page.waitForFunction(() => document.querySelector(".quota-history .quota-holds")?.textContent.includes("777K"));
     assert.equal(typeof release, "function");
     const delayed = page.waitForResponse((r) => r.url().includes("/history/holds") && new URL(r.url()).searchParams.get("to") === iso(now - 4 * D));
     release();
     await delayed;
-    assert.match(await card.locator(".quota-holds").textContent(), /777K/);
-    await pick.click();
+    assert.match(await card.locator(".quota-history .quota-holds").textContent(), /777K/);
+    await reader.click(page, pick);
     await page.locator(".sess-menu .pm-item").first().click();
-    assert.match(await card.locator(".quota-holds").textContent(), /100K/, "current estimate is restored");
-    await pick.click();
+    assert.match(await card.locator(".quota-live .quota-holds").textContent(), /100K/, "current estimate is restored");
+    await reader.click(page, pick);
     await page.locator(".sess-menu .pm-item").nth(1).click();
-    await page.waitForFunction(() => document.querySelector(".quota-holds")?.textContent.includes("111K"));
+    await page.waitForFunction(() => document.querySelector(".quota-history .quota-holds")?.textContent.includes("111K"));
     assert.equal(requests, 2, "completed selections reuse their own estimate");
     // a past cycle the server can't reckon says why, as a live one does
     data.historyHolds = () => [{ provider: "codex", user: "a@x.com", windows: [{ name: "Weekly", holdsWhy: "log" }] }];
-    await card.locator(".quota-refresh").click();
-    await page.waitForFunction(() => document.querySelector(".quota-holds-why")?.textContent === "Whole: not enough data");
-    assert.match(await card.locator(".quota-holds-why").getAttribute("title"), /before magpie's request log/);
-    assert.equal(await card.locator(".quota-holds").count(), 0);
+    await reader.click(page, card.locator(".quota-refresh").first());
+    await page.waitForFunction(() => document.querySelector(".quota-history .quota-holds-why")?.textContent === "Whole: not enough data");
+    assert.match(await card.locator(".quota-history .quota-holds-why").getAttribute("title"), /before magpie's request log/);
+    assert.equal(await card.locator(".quota-history .quota-holds").count(), 0);
     // and one with no estimate and no reason shows nothing, like a live card
     data.historyHolds = () => [];
-    await card.locator(".quota-refresh").click();
+    await reader.click(page, card.locator(".quota-refresh").first());
     await page.waitForFunction(() => !document.querySelector(".subscription-card[data-key=codex] .quota-holds-why"));
-    assert.equal(await card.locator(".quota-holds").count(), 0);
+    assert.equal(await card.locator(".quota-history .quota-holds").count(), 0);
     assert.deepEqual(await page.evaluate(() => ({ page: document.documentElement.scrollWidth > innerWidth, cards: [...document.querySelectorAll(".subscription-card")].some((c) => c.scrollWidth > c.clientWidth + 1) })), { page: false, cards: false });
   });
 }

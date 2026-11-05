@@ -919,7 +919,7 @@ body.window .field.solo { grid-column: auto; }
 .field .v { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; font-weight: 500; }
 .field .chev { color: var(--faint); display: inline-flex; margin-left: auto; padding-left: 1px; }
 .field:hover .chev, .field.open .chev { color: var(--muted); }
-.field.flash, .subscription-card.flash, .pq-card.flash, .row.pref.flash { animation: flash 1.2s ease-out; }
+.field.flash, .subscription-card.flash, .quota-account-card.flash, .pq-card.flash, .row.pref.flash { animation: flash 1.2s ease-out; }
 @keyframes flash { 0%, 35% { box-shadow: inset 0 0 0 1px var(--green); background: var(--green-soft); } 100% {} }
 
 /* ---- usage ---------------------------------------------------------------- */
@@ -933,10 +933,7 @@ body.window .field.solo { grid-column: auto; }
 .usage-range-menu svg { flex: none; color: var(--muted); transition: transform .15s var(--ease); }
 .usage-range-menu.open svg { transform: rotate(180deg); }
 .usage-range-menu:disabled { opacity: .55; }
-.subscription-usage { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; gap: 7px; margin-bottom: 8px; flex: none; }
-/* packed into columns (packUsage): each card as tall as itself, placed on
-   rows a pixel high, the gap between cards in its place on them (#860) */
-.subscription-usage.packed { grid-auto-rows: 1px; row-gap: 0; }
+.subscription-usage { display: flex; flex-direction: column; gap: 24px; margin-bottom: 16px; flex: none; }
 .subscription-card { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-width: 0; }
 /* a card's captions (resets, the period, a curve's dates) read at 4.5:1 or
    better on the card, below its figures (Jiabubu on Discord): light's
@@ -1037,6 +1034,53 @@ body.window .field.solo { grid-column: auto; }
 /* in the panel, between the vendor's head and its accounts' cards */
 .quota-all.pq-all { margin: 0; padding: 7px 12px 8px; border-radius: 10px; font-size: 11px; }
 .subscription-error { font-size: 11px; color: var(--muted); }
+/* Overview: a provider section owns its summary and independent account cards.
+   The tray and routing keep their compact quota-all strip. */
+.subscription-card.usage-provider { padding: 0; border: 0; border-radius: 0; background: none; }
+.usage-provider > .subscription-head { flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.usage-provider > .subscription-head b { font-size: 15px; }
+.quota-accounts { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+.quota-account-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.quota-account-card .subscription-account { flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; padding: 0 !important; font-size: 13px; }
+.quota-account-card .subscription-account .user { flex: 1 1 100px; font-weight: 600; }
+.quota-account-card .subscription-account .plan { font-size: 11px; }
+.quota-account-card .quota-acct-fold { width: 26px; height: 26px; margin: -4px; color: var(--muted); }
+.quota-account-card .quota-live { grid-template-columns: repeat(var(--quota-columns, 3), minmax(0, 1fr)); gap: 14px; }
+.quota-account-card .quota-live.quota-stack { grid-template-columns: minmax(0, 1fr); }
+.quota-account-card .quota-live .quota-labels { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; justify-content: stretch; gap: 4px; margin-bottom: 7px; }
+.quota-account-card .quota-live .quota-name { font-size: 12px; color: var(--muted); }
+.quota-account-card .quota-live .quota-n { display: flex; flex-basis: auto; flex-wrap: wrap; min-width: 0; white-space: normal; margin: 0; padding: 0; text-align: left; font-size: 18px; line-height: 1.35; font-weight: 600; }
+.quota-account-card .quota-live .quota-n > span { white-space: normal; overflow-wrap: anywhere; }
+.quota-account-card .quota-live .quota-reset { display: flex; font-size: 10.5px; }
+.quota-account-card .quota-track { height: 5px; }
+.quota-account-card .quota-low .quota-track i, .quota-total.low .quota-track i { background: var(--amber); }
+.quota-account-card .quota-empty .quota-track i, .quota-total.empty .quota-track i { background: var(--red); }
+.quota-account-card .quota-low .quota-n, .quota-account-state.low, .quota-total.low .quota-total-value { color: var(--amber); }
+.quota-account-card .quota-empty .quota-n, .quota-account-state.empty, .quota-total.empty .quota-total-value { color: var(--red); }
+.quota-account-card .quota-held .quota-track { opacity: .35; }
+.quota-held-note { display: none; }
+.quota-account-card .quota-held-note { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; overflow-wrap: anywhere; }
+.quota-account-state { margin: 0 0 14px; font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.quota-account-state.low, .quota-account-state.empty, .quota-account-state.unknown { border-radius: 6px; background: var(--pill); padding: 5px 8px; }
+.quota-account-card > .quota-read { margin-top: 12px; }
+.quota-account-card .quota-refresh { width: 14px; margin: 0 0 0 4px; opacity: 1; }
+.quota-account-details { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; min-width: 0; }
+.quota-account-details:empty { display: none; }
+.quota-account-details > :first-child { margin-top: 0; }
+.quota-history-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+.quota-overview { min-width: 0; margin-bottom: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.quota-overview-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 14px; font-size: 11px; color: var(--muted); }
+.quota-overview-head b { font-size: 13px; color: var(--fg); }
+.quota-overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 16px 24px; }
+.quota-total { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-variant-numeric: tabular-nums; }
+.quota-total-name { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.quota-total-value { font-size: 28px; line-height: 1.25; font-weight: 650; color: var(--fg); overflow-wrap: anywhere; }
+.quota-total-unit { font-size: 11px; color: var(--fg-2); }
+.quota-total-info, .quota-total-note { font-size: 11px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.quota-total .quota-track { margin: 4px 0; height: 5px; }
+.quota-overview-note, .quota-overview-unknown { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); margin: 12px 0 0; }
+.quota-overview-unknown { color: var(--amber); }
+
 /* the way to the provider's settings, on a plan card that needs its access key (#1821) */
 .subscription-error .quota-fix { font: inherit; color: var(--accent); padding: 0; background: none; border: 0; cursor: pointer; }
 /* WorkBuddy's credits a day (#568): the period's sum over a bar a day; a
@@ -4883,3 +4927,7 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .sess-tools .led-rename { flex: none; width: 180px; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 12px; }
 /* Settings › About › Open-source licenses: the notices, as written */
 .notices-text { margin: 0; font: 11px/1.5 var(--code); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.usage-provider > .subscription-head .us-handle { margin: 0; }
+.usage-provider > .subscription-head .quota-more { margin: 0 0 0 auto; white-space: normal; }
+.usage-provider > .quota-keys-more { margin: 10px 0 0; max-width: 100%; white-space: normal; }

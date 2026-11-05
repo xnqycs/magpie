@@ -1,3 +1,4 @@
+const reader = require("./reader.cjs");
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Usage's per-account eye, with Hide accounts on (outloudvi on Discord):
 // - a Kiro plugin account is named "email (way it was signed in to)"; its
@@ -60,6 +61,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang));
         await page.goto("http://magpie.test/?view=usage");
+        await page.locator(".quota-overview").first().waitFor();
         await page.locator(".subscription-account").nth(3).waitFor();
         const row = (provider, user) => page.locator(`.subscription-account[data-card="${provider}|${user}"]`);
         const hidden = (provider, user) => row(provider, user).evaluate((e) => e.querySelectorAll(".pii").length > 0 && !e.textContent.includes(e.dataset.card.split("|")[1]));
@@ -77,7 +79,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         for (const [p, u] of [["kiro", KG], ["kiro", KH], ["codex", SAME], ["zcode", SAME]]) assert.ok(await hidden(p, u), `${p} ${u} is hidden first`);
 
         // Kiro's account named by its email and its way in: the eye shows it
-        await row("kiro", KG).locator(".acct-eye").click();
+        await reader.click(page, row("kiro", KG).locator(".acct-eye"));
         await settle();
         assert.ok(await shown("kiro", KG), "the Kiro account's eye shows it");
         assert.equal(await row("kiro", KG).locator(".acct-eye").getAttribute("aria-pressed"), "true");
@@ -85,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await row("kiro", KH).locator(".acct-eye").getAttribute("aria-pressed"), "false");
 
         // one address on two services: the Codex card's eye shows Codex's only
-        await row("codex", SAME).locator(".acct-eye").click();
+        await reader.click(page, row("codex", SAME).locator(".acct-eye"));
         await settle();
         assert.ok(await shown("codex", SAME), "Codex's account shows");
         assert.ok(await hidden("zcode", SAME), "the same address on ZCode stays hidden");
@@ -93,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator("#sample").textContent(), `mail ${SAME} today`, "a sentence elsewhere follows the account shown");
 
         // pressed again: hidden again, everywhere
-        await row("codex", SAME).locator(".acct-eye").click();
+        await reader.click(page, row("codex", SAME).locator(".acct-eye"));
         await page.waitForFunction(() => document.querySelector("#sample .pii"));
         assert.ok(await hidden("codex", SAME));
         assert.ok(await shown("kiro", KG), "the Kiro account stays shown");

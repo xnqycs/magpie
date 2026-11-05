@@ -20,7 +20,7 @@ function section(start, end) {
   return source.slice(a, b);
 }
 // quotaall.js, which app.js loads once a provider has two accounts
-const merging = fs.readFileSync(path.resolve(__dirname, "../assets/quotaall.js"), "utf8").replace(/\r\n/g, "\n");
+const merging = fs.readFileSync(process.env.MAGPIE_QUOTA_JS || path.resolve(__dirname, "../assets/quotaall.js"), "utf8").replace(/\r\n/g, "\n");
 const ctx = vm.createContext({});
 ctx.window = ctx;
 vm.runInContext(`
@@ -141,4 +141,68 @@ test("a window held by a longer one used up counts as nothing left", () => {
     acct("b", [{ name: "Credits", amount: 100, limit: 500, unit: "credits" }]),
   ], now);
   assert.deepEqual(by(c, "Credits").map((w) => [w.amount, w.limit, w.held]), [[600, 1000, 1]]);
+});
+
+const overview = (subs) => JSON.parse(JSON.stringify(ctx.mergeQuotas(JSON.parse(JSON.stringify(subs)), now, true)));
+test("overview sums raw remaining shares, including one account, without rounding them first", () => {
+  const ten = Array.from({ length: 10 }, (_, i) => acct(String(i), [{ name: "5 hours", used: 80 }]));
+  const [w] = overview(ten).windows;
+  assert.equal(w.left, 2);
+  assert.equal(w.percentLeft, 20);
+  assert.equal(w.accounts, 10);
+  const [tiny] = overview([acct("a", [{ name: "Month", used: 99.999 }])]).windows;
+  assert(tiny.left > 0 && tiny.left < 0.0001);
+  const [unrounded] = overview(ten.map((q) => ({ ...q, windows: [{ name: "5 hours", used: 80.004 }] }))).windows;
+  assert(Math.abs(unrounded.left - 1.9996) < 1e-10);
+});
+test("overview keeps providers, plans and pools separate, including single-account groups", () => {
+  const r = overview([
+    acct("a", [{ name: "5 hours", used: 80 }], { plan: "Plus" }),
+    acct("b", [{ name: "5 hours", used: 50 }], { plan: "Pro" }),
+    acct("c", [{ name: "5 hours", used: 10 }], { provider: "elsewhere", plan: "Pro" }),
+    acct("d", [{ name: "5 hours", used: 40, pool: "Gemini" }], { plan: "Pro" }),
+  ]);
+  assert.equal(r.windows.length, 4);
+  assert.deepEqual(r.windows.map((w) => w.accounts), [1, 1, 1, 1]);
+  assert(Math.abs(r.windows[0].left - 0.2) < 1e-10);
+});
+test("overview identifies missing, failed and expired readings instead of filling them with zero", () => {
+  const r = overview([
+    acct("a", [{ name: "Month", used: 50 }]),
+    acct("b", [{ name: "5 hours", used: 0 }]),
+    acct("c", [], { error: "unreadable" }),
+    acct("d", [{ name: "Month", used: 90, resetsAt: iso(now - H) }], { asOf: iso(now - 2 * H) }),
+  ]);
+  const [month] = by(r, "Month");
+  assert.equal(month.left, 0.5);
+  assert.equal(month.accounts, 1);
+  assert.equal(month.missing, 2);
+  assert.equal(month.unknown, 1);
+  const [expired] = overview([acct("old", [{ name: "Month", used: 20, resetsAt: iso(now - H) }], { asOf: iso(now - 2 * H) })]).windows;
+  assert.equal(expired.accounts, 0, "no known total, not an empty allowance");
+});
+test("overview retains units, unlimited and held-window rules", () => {
+  const r = overview([
+    acct("a", [{ name: "5 hours", used: 0, heldBy: "Month" }, { name: "Credits", limit: 500, amount: 300, used: 60, unit: "credits" }, { name: "Chat", unlimited: true }]),
+    acct("b", [{ name: "5 hours", used: 80 }, { name: "Credits", limit: 1000, amount: 100, used: 10, unit: "credits" }, { name: "Chat", unlimited: true }]),
+  ]);
+  assert(Math.abs(by(r, "5 hours")[0].left - 0.2) < 1e-10);
+  assert.equal(by(r, "5 hours")[0].held, 1);
+  assert.equal(by(r, "Credits")[0].left, 1100);
+  assert.equal(by(r, "Chat")[0].unlimited, true);
+});
+
+test("overview never lets one account's overage consume another's remaining count", () => {
+  const r = overview([
+    acct("a", [{ name: "Credits", limit: 100, amount: 150, unit: "credits" }]),
+    acct("b", [{ name: "Credits", limit: 100, amount: 10, unit: "credits" }]),
+  ]);
+  assert.equal(r.windows[0].left, 90);
+  assert.equal(r.windows[0].percentLeft, 45);
+});
+test("a small positive total is never formatted as an empty allowance", () => {
+  ctx.countFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+  assert.equal(vm.runInContext("quotaTotalNumber(0.001)", ctx), "<0.01");
+  assert.equal(vm.runInContext("quotaTotalNumber(0)", ctx), "0");
+  assert.equal(vm.runInContext("quotaTotalNumber(1.23456)", ctx), "1.23");
 });

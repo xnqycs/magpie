@@ -64,6 +64,7 @@ test("no rule of the windows says subgrid", async () => {
 const windowsOf = (page) => page.evaluate(() => [...document.querySelectorAll(".subscription-card .quota-windows > .quota")].map((q) => ({
   row: Math.round(q.getBoundingClientRect().top),
   name: q.querySelector(".quota-name").getBoundingClientRect().height,
+  barHeight: q.querySelector(".quota-track")?.getBoundingClientRect().height,
   bar: q.querySelector(".quota-track")?.getBoundingClientRect().top,
   under: q.querySelector(".quota-labels").getBoundingClientRect().bottom,
   reset: q.querySelector(".quota-track + .quota-reset")?.getBoundingClientRect().top,
@@ -84,7 +85,7 @@ async function lined(page) {
     assert.equal(new Set(bars).size, 1, `row at ${y}: bars at ${bars} ${JSON.stringify(ws)}`);
   }
   for (const w of ws) if (w.bar != null) assert.ok(w.under <= w.bar + 0.5, `names past the bar ${JSON.stringify(w)}`);
-  for (const w of ws) if (w.reset != null) assert.ok(Math.abs(w.reset - w.bar - 13) < 0.6, `reset ${w.reset - w.bar}px under its bar's top`);
+  for (const w of ws) if (w.reset != null) assert.ok(Math.abs(w.reset - w.bar - w.barHeight - 9) < 0.6, `reset ${w.reset - w.bar}px under its bar's top`);
   return [...new Set(ws.map((w) => w.row))].some((y) => new Set(ws.filter((w) => w.row === y).map((w) => Math.round(w.name))).size > 1);
 }
 

@@ -1013,11 +1013,10 @@ function quotaCardMenus(card, subs) {
   for (const k of ["pointerup", "pointercancel", "pointerleave"]) card.addEventListener(k, stop);
 }
 function quotaCardMenu(target, card, subs) {
-  let part = [...card.children].find((c) => c.contains(target));
-  while (part && !part.classList.contains("subscription-account") && !part.classList.contains("subscription-head")) part = part.previousElementSibling;
-  const who = part?.classList.contains("subscription-account") && subs.find((q) => trayCardID(q) === part.dataset.card);
+  const part = target.closest(".quota-account-card");
+  const who = part && card.contains(part) && subs.find((q) => trayCardID(q) === part.dataset.card);
   const of = who ? [who] : subs;
-  const anchor = card.querySelector(".us-handle") || card.querySelector(".subscription-head");
+  const anchor = who ? part.querySelector(".subscription-account") : card.querySelector(".us-handle") || card.querySelector(".subscription-head");
   const again = agentMenu?.anchor === anchor;
   closeAgentMenu();
   if (again) return;
@@ -4249,4 +4248,35 @@ if (mode === "window" && params.get("view") === "usage") {
   const u = new URL(location.href);
   for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via", "period"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
+}
+
+// The account's tightest reported window, always described as remaining.
+// A constrained model/pool is named rather than declaring the whole account unusable.
+function overviewAccountState(sub) {
+  if (sub.error) return null; // quotaWindows shows the error and retry action
+  const ws = (sub.windows || []).filter((w) => !w.unlimited && !quotaNoShare(w) && Number.isFinite(w.used));
+  const held = ws.find((w) => w.heldBy);
+  const tight = ws.reduce((a, w) => !a || w.used > a.used ? w : a, null);
+  if (!tight) return null;
+  const stale = sub.asOf && ws.some((w) => w.resetsAt && Date.parse(w.resetsAt) <= Date.now());
+  const left = 100 - to100(tight.used);
+  const state = stale ? "unknown" : held || left === 0 ? "empty" : left <= 20 ? "low" : "normal";
+  const name = (tight.pool ? tight.pool + " · " : "") + t(tight.name);
+  const words = stale ? t("Awaiting a new reading") : held ? t("Limited by {window}", { window: t(held.heldBy) })
+    : t("{window}: {n} left", { window: name, n: countFormat.format(left) + "%" });
+  return el("div", "quota-account-state " + state, words);
+}
+
+// Account grids can shorten the page when a row is hidden or folded.
+// Keep the reader's position, using the shell's temporary bottom room.
+function keepOverviewPosition() {
+  const view = $("#view-usage"), at = view?.scrollTop || 0;
+  return () => {
+    if (!view || view.hidden || !at) return;
+    const end = contentEnd(view);
+    if (end > at) setRoom(view, Math.max(roomOf(view), at + view.clientHeight - end));
+    view.scrollTop = at;
+    readerLeaves(view);
+    if (held?.v === view) held.lay = laid(held);
+  };
 }

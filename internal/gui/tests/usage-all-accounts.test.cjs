@@ -1,15 +1,7 @@
-// Run with Node's test runner and Playwright on the module path; see README.md.
-// A provider's accounts together (CryptoSarom on X: 有时候更关心某个模型还能
-// 用多少). On the Usage page a card of several accounts has "All N accounts"
-// under its head, each window's figure added up or averaged over one plan,
-// how many couldn't be read, and each account as it was below it; the tray
-// panel's group has the same strip above its accounts' cards, and a routing
-// group's row a line a provider of its members. A card whose accounts have
-// nothing in common (a Plus and a Pro Codex) and one of a single account
-// have none. Used or left turns it with the rest. No account is named in
-// it. At 440px nothing in it is cut or spills. English, Chinese (both),
-// Japanese and German, light and dark; no backend, the API is faked here.
-// SHOTS=<dir> keeps a screenshot of each place.
+// Overview totals always show remaining, in full-account equivalents or
+// their actual units, with a card per account. The tray and Routing keep
+// their compact aggregate and Used / Left semantics. Both engines, all
+// languages, with isolated API fixtures. SHOTS keeps screenshots.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -117,38 +109,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the Usage page
         const { page, errors } = await open(browser, lang, theme, "window", "http://magpie.test/?view=usage");
         const card = '#subscriptionUsage > [data-key="workbuddy-ai"]';
-        await page.waitForSelector(`${card} .quota-all`);
-        const strip = page.locator(`${card} .quota-all`);
-        assert.equal(await strip.locator(".quota-all-head").textContent(), w.all);
-        assert.equal(await strip.locator(".quota-all-unknown").textContent(), w.unknown);
-        assert.equal(await strip.locator(".quota-all-w").count(), 1);
-        const n = await strip.locator(".quota-all-n").textContent();
-        assert.ok(n.includes("355 / 1,500"), n);
-        if (w.used) assert.equal(n, w.used);
-        // under the head, before the accounts, each still there
+        await page.waitForSelector(`${card} .quota-overview`);
+        const strip = page.locator(`${card} .quota-overview`);
+        assert.equal(await strip.locator(".quota-overview-unknown").textContent(), w.unknown);
+        assert.equal(await strip.locator(".quota-total").count(), 1);
+        assert.equal(await strip.locator(".quota-total-value").textContent(), "1,145");
         assert.ok(await page.evaluate((card) => {
-          const c = document.querySelector(card), s = c.querySelector(".quota-all");
-          return s.previousElementSibling.matches(".subscription-head") && c.querySelectorAll(".subscription-account").length === 4;
+          const c = document.querySelector(card), s = c.querySelector(".quota-overview");
+          return s.previousElementSibling.matches(".subscription-head") && c.querySelectorAll(".quota-account-card").length === 4;
         }, card));
-        // no account named in it
         assert.ok(!(await strip.textContent()).includes("@example.com"));
-        // nothing in common, or one account: no strip
-        assert.equal(await page.locator('#subscriptionUsage > [data-key="codex"] .quota-all').count(), 0);
-        assert.equal(await page.locator('#subscriptionUsage > [data-key="kimi"] .quota-all').count(), 0);
-        // one plan's shares: the mean, each window apart, side by side
-        const max = page.locator('#subscriptionUsage > [data-key="claude"] .quota-all .quota-all-n');
-        assert.equal(await max.count(), 2);
-        assert.ok((await max.nth(0).textContent()).includes("50%"));
-        assert.ok((await max.nth(1).textContent()).includes("35%"));
-        assert.ok(await page.evaluate(() => { const [a, b] = document.querySelectorAll('#subscriptionUsage > [data-key="claude"] .quota-all-w'); return Math.abs(a.getBoundingClientRect().top - b.getBoundingClientRect().top) < 1; }), "side by side");
-        assert.deepEqual(await fits(page, ".quota-all"), []);
+        assert.equal(await page.locator('#subscriptionUsage > [data-key="codex"] .quota-total').count(), 2, "each plan stays separate, even with one account");
+        assert.equal(await page.locator('#subscriptionUsage > [data-key="kimi"] .quota-total').count(), 1);
+        const max = page.locator('#subscriptionUsage > [data-key="claude"] .quota-total-value');
+        assert.deepEqual(await max.allTextContents(), ["≈ 1", "≈ 1.3"]);
+        assert.ok(await page.evaluate(() => { const [a, b] = document.querySelectorAll('#subscriptionUsage > [data-key="claude"] .quota-total'); return Math.abs(a.getBoundingClientRect().top - b.getBoundingClientRect().top) < 1; }), "side by side");
+        assert.deepEqual(await fits(page, ".quota-overview"), []);
         await shot(page, `usage-${engine}-${lang}-${theme}`);
-        // used or left turns it with the rest
+        const total = await strip.textContent();
         await page.locator("#quotaMode .opt").nth(1).click();
-        await page.waitForFunction((card) => !document.querySelector(card + " .quota-all-n").textContent.startsWith("355"), card);
-        const left = await strip.locator(".quota-all-n").textContent();
-        assert.ok(left.includes("1,145 / 1,500"), left);
-        if (w.left) assert.equal(left, w.left);
+        assert.equal(await strip.textContent(), total, "overview totals always show remaining");
         await page.locator("#quotaMode .opt").nth(0).click();
 
         // a routing group's row
@@ -225,16 +205,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       };
       // the Usage page, left
       const { page, errors } = await open(browser, lang, "light", "window", "http://magpie.test/?view=usage", 440, 900, heldCards);
-      const strip = page.locator('#subscriptionUsage > [data-key="codex"] .quota-all');
+      const strip = page.locator('#subscriptionUsage > [data-key="codex"] .quota-overview');
       await strip.waitFor();
       await page.locator("#quotaMode .opt").nth(1).click();
-      await page.waitForFunction(() => /left|剩|残|übrig/i.test(document.querySelector('#subscriptionUsage > [data-key="codex"] .quota-all .quota-all-n')?.textContent || ""));
-      const [five, week] = await check(page, strip);
-      assert.equal(pct(five), 0, "no 5 hours left in all, not 75%: " + five);
-      assert.equal(pct(week), 5.5, week);
-      if (w.five) assert.equal(five, w.five);
-      if (w.week) assert.equal(week, w.week);
-      assert.deepEqual(await fits(page, ".quota-all"), []);
+      assert.deepEqual(await strip.locator(".quota-total-value").allTextContents(), ["≈ 0", "≈ 0.22"]);
+      assert.equal(await strip.locator(".quota-total").first().locator(".quota-total-note").count(), 1, "held accounts are named in the summary");
+      assert.equal(await page.locator(".quota-account-card .quota-held-note").count(), 3, "each affected account explains its full-looking window");
+      assert.deepEqual(await fits(page, ".quota-overview"), []);
       await shot(page, `held-usage-${engine}-${lang}`);
       assert.deepEqual(errors, []);
       // the tray panel

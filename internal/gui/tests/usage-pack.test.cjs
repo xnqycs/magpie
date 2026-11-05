@@ -1,19 +1,6 @@
-// Run with Node's test runner and Playwright on the module path; see README.md.
-// The Usage page's cards packed into columns (huoranxuanyuan, #860): a tall
-// Codex card beside Antigravity and a DeepSeek balance left the short two
-// mostly empty, each stretched to Codex's height. Now each card is as tall
-// as itself, and the next in the order goes to the column that ends
-// highest: Antigravity and DeepSeek stacked beside Codex, at the reporter's
-// 897px (1569px at 175%) and 1018px windows and a wide one. Cards of a
-// height keep one row in their order; a narrow window has one column. The
-// order on the page is still the user's (dragging and Alt+arrows are
-// usage-arrange's), no card overlaps another, and a card opened to its
-// accounts in full pushes the one under it down rather than over it.
-// The last card in each column reaches down to where the tallest ends
-// (ikunbots on X, "卡片可以对齐吗"): Claude Code, Codex and Antigravity side
-// by side end on one line, and DeepSeek under Antigravity ends with Codex.
-// Chromium and WebKit, English, Chinese, Japanese and German; no backend,
-// the API is faked here.
+// Provider sections retain their order and full width. Account cards own
+// their height inside a grid, and expanding one keeps the reader in place.
+// Unequal counts, model families, balances and narrow windows are covered.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -102,25 +89,18 @@ const boxes = (page) => page.$$eval("#subscriptionUsage > .subscription-card", (
 const settle = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
 
 function sound(cards, what) {
-  const end = Math.max(...cards.map((c) => c.bottom));
-  for (const c of cards) {
-    // as tall as what is in it, its padding and border, but for the last in
-    // its column, which ends where the tallest column does (ikunbots on X)
-    const last = !cards.some((d) => d !== c && d.x === c.x && d.y > c.y);
-    assert.ok(c.inner <= c.bottom, `${what}: ${c.key} holds what is in it: ${JSON.stringify(c)}`);
-    if (last) assert.ok(Math.abs(c.bottom - end) < 0.5, `${what}: ${c.key}, last in its column, ends with the others: ${JSON.stringify(cards)}`);
-    if (!last || c.bottom < end - 0.5) assert.ok(c.bottom - c.inner < 16, `${what}: ${c.key} is as tall as itself: ${JSON.stringify(c)}`);
-  }
-  for (const a of cards) for (const b of cards) {
-    if (a === b) continue;
-    const apart = a.x + a.w <= b.x + 1 || b.x + b.w <= a.x + 1 || a.y + a.h <= b.y + 1 || b.y + b.h <= a.y + 1;
-    assert.ok(apart, `${what}: ${a.key} and ${b.key} overlap: ${JSON.stringify([a, b])}`);
+  for (const [i, c] of cards.entries()) {
+    assert.ok(c.inner <= c.bottom + 1, `${what}: ${c.key} holds its content`);
+    assert.ok(c.bottom - c.inner < 16, `${what}: ${c.key} fits its content`);
+    assert.equal(c.x, cards[0].x, "providers share the full available width");
+    assert.equal(c.w, cards[0].w, "providers have equal widths");
+    if (i) assert.ok(c.y >= cards[i - 1].bottom + 20, "provider sections have a clear gap");
   }
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "ja", "de"]) {
-    test(`${engine} ${lang}: the Usage page's short cards stack beside a tall one`, async (t) => {
+    test(`${engine} ${lang}: provider sections stay full width and account cards resize independently`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const pages = [];
       t.after(async () => {
@@ -145,14 +125,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       };
       const now = Date.now();
 
-      // ikunbots' row of three of different heights: as tall as each other,
-      // their bottoms lined up, each one's content at its top
+      // Providers of different heights are separate full-width sections.
       for (const width of [1400, 1018]) {
         const page = await open(`ikun-${width}`, { quotas: ikun(now) }, width);
         const cards = await boxes(page);
         assert.deepEqual(cards.map((c) => c.key), ["claude", "codex", "antigravity"], "the order on the page is the user's");
-        assert.ok(cards.every((c) => c.y === cards[0].y), `${width}px: one row: ${JSON.stringify(cards)}`);
-        assert.ok(cards.every((c) => Math.abs(c.bottom - cards[0].bottom) < 0.5), `${width}px: the cards' bottoms line up: ${JSON.stringify(cards)}`);
+        assert.ok(cards.every((c) => c.x === cards[0].x), `${width}px: full width: ${JSON.stringify(cards)}`);
+
         assert.ok(Math.max(...cards.map((c) => c.inner)) - Math.min(...cards.map((c) => c.inner)) > 20, `${width}px: the fixture's cards hold different heights: ${JSON.stringify(cards)}`);
         sound(cards, `ikun ${width}px`);
         // a narrow window: one column, each card as tall as itself
@@ -161,11 +140,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const narrow = await boxes(page);
         assert.ok(narrow.every((c) => c.x === narrow[0].x), `one column: ${JSON.stringify(narrow)}`);
         for (const c of narrow) assert.ok(c.bottom - c.inner < 16, `narrow: ${c.key} is as tall as itself: ${JSON.stringify(c)}`);
-        // and wide again: lined up again
+        // and wide again: the provider sections still occupy separate rows
         await page.setViewportSize({ width, height: 900 });
         await settle(page);
         const back = await boxes(page);
-        assert.ok(back.every((c) => c.y === back[0].y && Math.abs(c.bottom - back[0].bottom) < 0.5), `${width}px again: one row, bottoms lined up: ${JSON.stringify(back)}`);
+        assert.ok(back.every((c) => c.x === back[0].x && c.w === back[0].w), `${width}px again: separate rows at equal widths: ${JSON.stringify(back)}`);
       }
 
       // the reporter's three, at their window and wider
@@ -176,20 +155,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         sound(cards, `${width}px`);
         const [codex, ag, ds] = cards;
         assert.equal(ag.x, ds.x, `${width}px: DeepSeek under Antigravity: ${JSON.stringify(cards)}`);
-        assert.ok(ag.x > codex.x && ag.y === codex.y, `${width}px: Antigravity beside Codex, at its top`);
-        assert.ok(Math.abs(ds.y - (ag.y + ag.h) - 7) <= 1, `${width}px: the cards' own gap between them: ${JSON.stringify([ag, ds])}`);
-        // still stacked, not stretched: Antigravity as tall as itself, and
-        // DeepSeek, last in the column, ends where Codex does
-        assert.ok(ag.bottom - ag.inner < 16, `${width}px: Antigravity as tall as itself: ${JSON.stringify(ag)}`);
-        assert.ok(Math.abs(ds.bottom - codex.bottom) < 0.5, `${width}px: DeepSeek ends where Codex does: ${JSON.stringify(cards)}`);
+        assert.equal(ag.x, codex.x, "one provider section per row");
+        assert.ok(ag.y > codex.bottom && ds.y > ag.bottom, "provider order is vertical");
       }
 
-      // cards of a height: one row, in their order; a narrow window one column
-      // as wide as 1300 beside the sidebar
+      // Equal-height sections keep their order at both widths.
       const row = await open("even", { quotas: even(now) }, 1512);
       let cards = await boxes(row);
       assert.deepEqual(cards.map((c) => c.key), ["kimi", "zai", "minimax", "moonshot"]);
-      assert.ok(cards.every((c) => c.y === cards[0].y), `one row: ${JSON.stringify(cards)}`);
+      assert.ok(cards.every((c) => c.x === cards[0].x), `one row: ${JSON.stringify(cards)}`);
       assert.deepEqual(cards.map((c) => c.x), [...cards.map((c) => c.x)].sort((a, b) => a - b), "left to right in their order");
       sound(cards, "even");
       await row.setViewportSize({ width: 480, height: 900 });
@@ -206,13 +180,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       sound(cards, "folded");
       const scrollY = () => fold.evaluate(() => [document.scrollingElement.scrollTop, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join());
       const before = await scrollY(), codex0 = cards.find((c) => c.key === "codex");
+      const account = fold.locator('#subscriptionUsage > [data-key="codex"] .quota-account-card').nth(1);
+      const accountHeight = (await account.boundingBox()).height;
       await fold.locator('#subscriptionUsage > [data-key="codex"] .subscription-account.brief .quota-acct-fold').click();
       await settle(fold);
       cards = await boxes(fold);
       const codex1 = cards.find((c) => c.key === "codex");
-      // what it holds grew; the card with it, unless it already reached
-      // down to the end of the stack beside it
-      assert.ok(codex1.inner > codex0.inner && codex1.h >= codex0.h, `the card grew: ${JSON.stringify([codex0, codex1])}`);
+      // An account grows independently; its row may already have room.
+      assert.ok((await account.boundingBox()).height > accountHeight, "the opened account grows inside its own card");
+      assert.ok(codex1.h >= codex0.h, "the section fits its tallest card; the neighbor may already be as tall");
       assert.equal(codex1.x, codex0.x, "the card clicked stays where it was");
       assert.equal(codex1.y, codex0.y, "the card clicked stays where it was");
       sound(cards, "opened");

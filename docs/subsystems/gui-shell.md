@@ -278,43 +278,56 @@ keeping that tab as the reader's own. See `routing-acts-compact.test.cjs`.
 
 ### A provider's accounts together
 
-A Usage card of several accounts (not a card of keys, which has its sum)
-has "All N accounts" under its head, and the tray panel's group of
-several the same strip above its cards (`quotaAll`, CryptoSarom on
-X). A routing group's row has a line for each provider among its
-members: what is left of that provider's accounts together
-(`groupQuota` in `plugins/routing/client.js`, drawn again when
-`quotas` is new). `quotaAll` and `mergeQuotas` are in `quotaall.js`, which app.js imports
-once a provider has two accounts (`quotaAllJS`) and the Routing page
-once a group's member has readings, so they weigh nothing on the core;
-each place is drawn again once it is in. All three come from
-`mergeQuotas`, which puts together only what reads alike:
+Usage → Overview renders one full-width section per provider, with a
+remaining-allowance summary and a responsive grid of independent account
+cards (`renderQuotas`, `packUsage` in app.js). Every account owns its name,
+live meters, read/refresh line and expandable details. Three windows fit
+side by side when the card has room; narrow cards put all windows in one
+column, never an isolated third window beside the next account. The grid
+has at most three columns. Existing account expansion, many-account folds,
+hiding, provider order and privacy preferences are retained. Folded accounts
+count in the summary; accounts hidden from Overview do not. Menu actions
+and focus highlights resolve the enclosing account by its card identity.
 
-- a counted window (`limit`) of one name and unit adds its amounts and
-  limits, its share the share of the sum; a wallet (`balance`) adds its
-  balances in one unit;
-- a window said only as a share is the mean of the accounts on one
-  plan, the same allowance each; two plans are never averaged, and a
-  window more than one plan has is named with its plan;
-- a share is never added to a count; `text` windows are left out;
-  unlimited only where every account read says so;
-- an account whose reading failed is unknown, not 0, and is counted
-  ("1 couldn't be read"); a window an `asOf` reading stands in for,
-  whose reset has passed, is left out and counted in its tooltip;
-- a window the account can't spend counts as used up: its `heldBy`
-  (`provider.WithHeldWindows`, set on `/api/usage/quotas`) names another
-  window that stops the account for every model, is used up and starts
-  again after it, as 7 days at 0% left holds 5 hours at 100% (#4791).
-  Not the other way: a week with room behind five hours used up keeps
-  it. The tooltip counts how many were held; each account's own card
-  still shows the vendor's figure;
-- only what two or more accounts have goes together; family and pool
-  stay, so `familyWindows` folds the result as an account's.
+`quotaOverview` in quotaall.js always shows what is left, independently of
+the Used / Left preference that still controls account meters. Percentage
+windows show the sum of remaining shares in full-account equivalents
+(ten accounts with 20% left are approximately two full accounts), together
+with the average and contributing count. Actual counts and wallets retain
+their units. Totals are kept apart by provider, source, plan, window, model
+family, pool and unit; windows are independent limits, not additive periods.
+Even a single-account group can have a total. Precision is retained until
+formatting, and a nonzero total below 0.01 is shown as less than 0.01.
 
-No account is named in it, and each account stays below it as it was.
-There is no switch: it is additive, and the figure follows used or left
-with the rest. See `usage-merge.test.cjs` (the merge) and
-`usage-all-accounts.test.cjs` (the three places).
+The summary uses `mergeQuotas` with its overview option. Its default remains
+the compact aggregate used by the tray (`quotaAll`) and Routing
+(`groupQuota` in plugins/routing/client.js): counted windows add their
+amounts/limits, wallets add their balances, and percentage windows average
+only accounts on one plan. Those two surfaces keep Used / Left and omit
+aggregates with fewer than two contributing accounts. quotaall.js is loaded
+on demand, now also for an Overview with only one account.
+
+Both variants leave failed readings and cached windows past their reset out
+of their figures. Overview additionally reports missing readings per window;
+no contributing reading is shown as unavailable, never as zero or full.
+`text` rows have no aggregate. A window's `heldBy`, supplied by
+`provider.WithHeldWindows`, means another exhausted window prevents spending
+its remainder before it resets; it contributes no remainder. The account
+still shows the vendor's own percentage, with a visible restriction label
+and muted bar. Account health and colours always describe the remaining
+share: normal above 20%, warning through 20%, depleted at zero. A model or
+pool restriction is named rather than declaring the whole account unusable.
+
+Historical cycle selection changes only the corresponding account's details;
+live meters and provider totals stay current. History's meters and read time
+are labelled separately. Refresh, folds and hiding preserve the reader's
+position using the shell's existing temporary bottom-room mechanism.
+
+See `usage-merge.test.cjs`, `usage-overview-cards.test.cjs`,
+`usage-all-accounts.test.cjs`, `usage-pack.test.cjs`, `quota-curve.test.cjs`
+and `usage-cards-hide.test.cjs`. Browser checks use isolated API fixtures;
+the new overview matrix covers both engines, five languages, both themes,
+and desktop and narrow widths.
 
 ### The Sessions page's folders
 
@@ -602,7 +615,7 @@ covers it in both engines, every language and a narrow window.
 - A window's Pace is a number on its card's reset line (fflake33 on Discord): the share used less the share of the window gone by, in points, "Pace +12%" over an even pace and "−8%" under it, turned with the meter when it shows what is left, amber while more is used than an even pace would have (`quotaPace`, `paceLine`). The window's start is the gateway's, `startsAt` from `provider.WithWindowStarts` (its reset less its span, `QuotaWindow.Bounds`); a window whose span isn't known, with no limit, or a past cycle has none. Settings › *Menu bar pace* (`settings.TrayPace`, off by default, hidden on Windows, whose tray shows no text but the first card's figure as its icon) puts the same number beside each figure in the menu bar and in its tooltip (`trayPace`, `QuotaWindow.Pace`). See `TestWindowPace`, `TestTrayUsagePace` and `quota-pace.test.cjs`.
 - Settings › *Menu bar windows* (`settings.TrayWindows`, StrikingRaw on X) picks which of a subscription's windows its menu bar card shows, keyed by provider id (every account of it, the in-use `|*` card too) and by window kind, not position: `trayWindowKind` names a window by its span ("5h", "1d", "7d", "month", "15m"), by `name:` its name when the span isn't known. Unset shows every window, as before; a pick none of whose kinds the card still has shows every window again (`trayShownKinds`), never an empty card. Only the bar's rows, the Linux label and Windows' icon figure are filtered; the tooltip still says every window. One row draws in the menu bar's own font (13pt regular), two stacked rows in 10pt regular, both with digits of one width (`mpRowFont`, `TestTrayRowFont`; qingnianxiaozhe on X found the old 9.5pt semibold and 11pt medium heavier than Surge's and iStat Menus' figures beside them). The GUI learns the kinds from `trayKind` on `/api/usage/quotas` (`withTrayKinds`; model and aside windows get none). The row lists a pill per ticked subscription with two or more kinds, opening the app's menu (All windows, then each kind), shown on Windows too, where the first card's pick decides the tray icon's figure; its code is in `traywindows.js`, imported when Settings draws ticked cards. Per computer through `KeepOwn`. See `TestTrayWindowsPicked`, `TestTrayWindowsKept` and `tray-windows.test.cjs`.
 - In Usage → Allowances, Trends → Cycle offers each account's own recorded cycle menu beside its curve (`quotaCurve`, `quotaRecordedCycles` in [`app.js`](../../internal/gui/assets/app.js)). The longest window (usually weekly) owns the menu; shorter windows are drawn over the selected dates with their own reset breaks. `/api/usage/quotas/history?days=45` supplies all retained readings, including remote cards. Completed cycles come from observed boundaries, not seven-day arithmetic; an early reset ends the previous cycle at the vendor's new start if it fits between readings, otherwise at the first new reading. Each menu option gives its observed duration, so an early reset is not labelled as a full seven days. The selected meters, plot, legend, tooltip and dashed pace use that cycle's last readings, never today's percentages. A window without a reading in the selected interval says so instead of showing a current value. A local account's past cycle asks `/api/usage/quotas/history/holds?provider=&user=&from=&to=` once per selection (`quotaCycleHoldsOf`), which asks no vendor (#2009, NorethSea): `HistoricalWindowHolds` in [`window_holds_history.go`](../../internal/usage/window_holds_history.go) reckons each window's whole at its own last reading in that cycle, from the request log up to that reading, so the 5-hour figure is the cycle's last 5-hour window, never its short windows added up. Its tooltip names that window's start and the reading's time. It shows "Loading…" until the answer comes. A window it can't reckon says "not enough data" with the reason, as a current card does; a reply that comes after another cycle was picked is dropped, and a card's Refresh or an asked read reckons again. Historical meters show the cycle end and sampling time; current account actions, balances and policies are left out until returning to the current view. Accounts are independent, and a selection survives card refreshes in the same page. Trends → 2 days temporarily shows recent readings; Off removes the curves; the tray always shows its current cycle. See `quota-curve.test.cjs` and the [history limits and reset inference](providers-accounts.md#constraints-and-failure-behavior).
-- The Usage page's cards are packed into columns, never all stretched to a row's height (`packUsage`, #860): each card in that order goes to the leftmost column that ends highest, on 1px grid rows, so short cards stack beside a tall one. The last card in each column then reaches down to where the tallest column ends (a `min-height`, cleared before the cards are measured again), so cards side by side in one row are as tall as each other and a stack ends with the tall card beside it (ikunbots on X); content stays at each card's top. The page's order (DOM, dragging, Alt+arrows) stays `UsageOrder`. The column count is the most 260px columns that fit, or one fewer when that leaves much less empty room; it is chosen again only when the cards change or the width fits another number of columns, so a card opened or folded stays where it is, even as the scrollbar comes in. See `usage-pack.test.cjs`.
+- The Usage overview's full-width provider sections, independent account grids and remaining totals are described under [A provider's accounts together](#a-providers-accounts-together).
 - The Providers page has a search box over its list (#1614, `findProviders` in [`app.js`](../../internal/gui/assets/app.js)): the words typed keep the rows, on and off, whose text or data say them all: name, id, preset, addresses, every model's id and name, the account's user and plan and each login's, account names and key names. The Turned off fold stays open while searching; Escape or clearing the box shows every row and the fold as it was. A row that is on reorders by dragging its logo, Alt+↑/↓, Alt+Shift+↑/↓ (top, bottom) or its right-click menu (`openProviderMenu`: Move to top, Move up, Move down, Move to bottom). While searching, a step or a drop moves it among the rows shown (it takes the place of the row it passes, `stepProvider`, `shownToOn`) and the hidden ones keep their order; Move to top and Move to bottom go to the ends of the whole list. Every move saves the whole order through `POST /api/providers/arrange`. See `provider-find.test.cjs` and `provider-order.test.cjs`.
 - Hide accounts (`window.hideAccounts` at the end of [`app.js`](../../internal/gui/assets/app.js)) masks every account name and address in the window's text and tooltips, its menus and dialogs too, by one switch for the whole window and the tray panel. Routing's, Usage's and Providers' buttons (`#rtMask`, `#usageMask`, `#pvMask` beside Providers' search box) and Settings › Privacy's row are that one switch, stored in `magpie.maskEmails`: turned on any page, every page is hidden and every button says so, and another window or the panel follows through the `storage` event (paultian in #feedback: Providers had a switch of its own, so one page was hidden while another wasn't). A `magpie.maskProviders` left by the versions that had Providers' own switch is folded in once and removed: hidden on either page then is hidden everywhere now. While it is not chosen, it follows Mask personal data, and turning that on turns it on (`provider-mask.test.cjs`). While it is on, an account's name on the provider editor's row (`accountNameButton`, and the one-account line) and on its Usage card (`quotaWho`), and on the tray panel's Usage card (`panelQuotaCard`'s `.pq-who`, in sight while the card is hovered), has an eye (`hideAccounts.eye`), in sight on hover or keyboard focus. A click shows that one account, its address and the name the user gave it together (`kin`), everywhere that page draws it, tooltips included, while the others stay hidden (yogurt36 on Discord, for a screen share). The accounts shown are a set held in memory that `hits()` skips; nothing stores them. The window and the panel are pages of their own, each with its own set: one shown in the window stays hidden in the panel and the other way round, so a screenshot of either shows only what was shown there. Closing the window hides them again: the page stays loaded while the window is hidden, so `hideMain` runs `mainClosedJS` (`hideAccounts.closed`) first. Putting the panel away hides the panel's again, from its `visibilitychange` (the one that drops `panelPeek`) (`account-eye.test.cjs`, `TestClosingHidesShownAccounts`). What it hides is the accounts: their addresses, their vendors' values (`user`, `account`, Routing's `who`) and a name that stands for one, a plugin's (`accountUsers`, a card's `alias` without `named`) or a seat's. The name the user gave an account (`AccountNames`; a card's `alias` with `named`, which `withAccountNames` sets) is no account and stays in sight, beside the account it names, hidden (faketrader in #3656: several accounts couldn't be told apart). A label is scoped by its element, never by its value: in the user's own name (`.own-name`), a plan (`.plan`, the Providers row's `.acct-plan`), a model (`.model-value`) and a Usage card's title (`.subscription-head > b`) only an address is hidden, so an Antigravity account whose value is "Google" leaves "Google AI Pro" readable while an address written in a plan is still hidden; the same holds for the tooltips of plans and models (`TIPS`), not for the own name's, which says the account (`LABELS` in app.js, `account-mask-alias-plan.test.cjs`). The tray panel card's tooltip joins the account and the plan in one string, and still hides a plan's word that is an account's value.
 - A new user's Agents page (the window's first page and the panel's Agents tab) has a *Get started* card above the agents in the welcome's place (wangye1644294 on X, `guideCard` in [`app.js`](../../internal/gui/assets/app.js)). Its three steps are: add a model source; connect an agent, where the agents magpie found that can be connected are named and each is connected in one click (`agents/connect`); and, optional, a routing group, with the most harmless starter template that can be made from the user's models (`provider.Templates`, Never stuck first) added in one click through `POST /api/groups/template`. Every tick comes from the state: the models magpie serves (`served` in `/api/state`, groups left out), an agent wired, or a group that isn't automatic. None comes from the card having been seen. The card goes once the first two steps are done. Its close button saves `settings.GuideHidden` through `POST /api/settings/guide`, so the panel, the window and a reload agree, and the Settings save keeps it. See `getting-started.test.cjs`.
